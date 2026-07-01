@@ -19,11 +19,6 @@ buildscript {
 }
 apply plugin: "com.facebook.react.rootproject"
 allprojects {
-    configurations.all {
-        resolutionStrategy {
-            force 'com.facebook.fresco:animated-gif:3.2.0'
-        }
-    }
     repositories {
         maven {
             url(new File(['node', '--print', "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), '../android'))
@@ -34,12 +29,5 @@ allprojects {
         google()
         mavenCentral()
         maven { url 'https://www.jitpack.io' }
-        maven {
-            url 'https://oss.sonatype.org/content/repositories/snapshots/'
-            metadataSources {
-                mavenPom()
-                artifact()
-            }
-        }
     }
 }
