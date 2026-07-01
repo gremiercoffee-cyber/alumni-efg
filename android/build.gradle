@@ -24,9 +24,18 @@ allprojects {
             force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.25'
             force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.25'
             force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.25'
+            force 'com.facebook.fresco:animated-gif:3.2.0'
+            force 'com.facebook.fresco:animated-base:3.2.0'
+            force 'com.facebook.fresco:fbcore:3.2.0'
+            force 'com.facebook.fresco:imagepipeline:3.2.0'
+            force 'com.facebook.fresco:fresco:3.2.0'
         }
     }
     repositories {
+        exclusiveContent {
+            forRepository { google() }
+            filter { includeGroupByRegex "com\\.android.*" }
+        }
         maven {
             url(new File(['node', '--print', "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), '../android'))
         }
