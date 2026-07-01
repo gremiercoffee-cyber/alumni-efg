@@ -31,22 +31,5 @@ export const FONTS = {
 export const SEED_TREE: FolderNode = {
   id: 'root',
   name: 'Everything',
-  children: [
-    {
-      id: 'f-coffee',
-      name: 'Gremier Coffee',
-      children: [
-        { id: 'f-coffee-suppliers', name: 'Suppliers', children: [] },
-        { id: 'f-coffee-deliveries', name: 'Deliveries', children: [] },
-      ],
-    },
-    {
-      id: 'f-yeshiva',
-      name: 'Yeshiva',
-      children: [
-        { id: 'f-yeshiva-students', name: 'Students', children: [] },
-      ],
-    },
-    { id: 'f-misc', name: 'Miscellaneous', children: [] },
-  ],
+  children: [],
 };
