@@ -163,7 +163,7 @@ export default function SettingsScreen({ settings, onSave }: Props) {
         </Text>
 
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>OPENAI API KEY (for transcription)</Text>
+          <Text style={styles.sectionLabel}>OPENAI API KEY (for transcription + organizing)</Text>
           <TextInput
             style={[styles.input, styles.keyInput]}
             value={draft.openaiKey}
@@ -175,18 +175,6 @@ export default function SettingsScreen({ settings, onSave }: Props) {
           />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>ANTHROPIC API KEY (for organizing)</Text>
-          <TextInput
-            style={[styles.input, styles.keyInput]}
-            value={draft.anthropicKey}
-            onChangeText={v => update('anthropicKey', v)}
-            placeholder="sk-ant-..."
-            placeholderTextColor={COLORS.brownFaint}
-            autoCapitalize="none"
-            secureTextEntry
-          />
-        </View>
 
         {SECTIONS.map(s => (
           <MicSection
