@@ -90,15 +90,14 @@ export default function App() {
   const handleRecordingComplete = async (audioUri: string) => {
     setFlow('processing');
     try {
-      if (!settings.openaiKey) throw new Error('No OpenAI key — add it in Settings first.');
-      if (!settings.anthropicKey) throw new Error('No Anthropic key — add it in Settings first.');
+if (!settings.openaiKey) throw new Error('No OpenAI key — add it in Settings first.');
       const transcript = await transcribeAudio(audioUri, settings.openaiKey);
       const folderList = flattenFolders(tree);
       const classification = await classifyNote({
         transcript,
         folderList,
         settings,
-        anthropicKey: settings.anthropicKey,
+        openaiKey: settings.openaiKey,
       });
       setPending({ ...classification, transcript, id: 'n-' + Date.now() });
       setFlow('toast');
