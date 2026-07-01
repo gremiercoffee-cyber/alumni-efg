@@ -7,13 +7,15 @@
     "android": "expo run:android"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "1.23.1",
     "expo": "~52.0.0",
+    "expo-asset": "~11.0.5",
     "expo-av": "~15.0.1",
+    "expo-file-system": "~18.0.12",
     "expo-speech": "~13.0.0",
     "expo-status-bar": "~2.0.0",
     "react": "18.3.1",
-    "react-native": "0.76.5",
-    "@react-native-async-storage/async-storage": "1.23.1"
+    "react-native": "0.76.9"
   },
   "private": true
 }
