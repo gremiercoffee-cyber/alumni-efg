@@ -221,7 +221,7 @@ if (!settings.openaiKey) throw new Error('No OpenAI key — add it in Settings f
         showToast={false}
       />
     );
-  } else if (tab === 'folders') {
+} else if (tab === 'folders') {
     screen = openFolder ? (
       <FolderDetailScreen
         folder={openFolder}
@@ -233,6 +233,10 @@ if (!settings.openaiKey) throw new Error('No OpenAI key — add it in Settings f
         tree={tree}
         notes={notes}
         onOpenFolder={setOpenFolder}
+        onAddFolder={(name) => {
+          const { tree: newTree } = addChildFolder(tree, 'root', name);
+          setTree(newTree);
+        }}
       />
     );
   } else if (tab === 'actions') {
