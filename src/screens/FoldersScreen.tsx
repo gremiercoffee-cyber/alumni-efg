@@ -59,10 +59,15 @@ function FolderRow({
   );
 }
 
-export default function FoldersScreen({ tree, notes, onOpenFolder }: Props) {
+export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }: Props) {
   return (
     <View style={styles.container}>
       <TopBar subtitle="Browse" title="Folders" />
+      {tree.children.length === 0 && (
+        <Text style={{ padding: 20, fontSize: FONTS.size.md, color: COLORS.brownFaint, textAlign: 'center' }}>
+          No folders yet — they'll appear here as you record notes, or tap + below to add one yourself.
+        </Text>
+      )}
       <ScrollView contentContainerStyle={styles.content}>
         {tree.children.map(folder => (
           <FolderRow
