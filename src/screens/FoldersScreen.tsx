@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
+  Modal,
+  TextInput,
   StyleSheet,
 } from 'react-native';
 import TopBar from '../components/TopBar';
@@ -15,6 +17,7 @@ interface Props {
   tree: FolderNode;
   notes: Note[];
   onOpenFolder: (folder: FolderNode) => void;
+  onAddFolder: (name: string) => void;
 }
 
 function FolderRow({
@@ -60,14 +63,28 @@ function FolderRow({
 }
 
 export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }: Props) {
+  const [modalVisible, setModalVisible] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+
+  const submitFolder = () => {
+    const trimmed = nameInput.trim();
+    if (trimmed) {
+      onAddFolder(trimmed);
+    }
+    setNameInput('');
+    setModalVisible(false);
+  };
+
   return (
     <View style={styles.container}>
       <TopBar subtitle="Browse" title="Folders" />
+
       {tree.children.length === 0 && (
-        <Text style={{ padding: 20, fontSize: FONTS.size.md, color: COLORS.brownFaint, textAlign: 'center' }}>
+        <Text style={styles.empty}>
           No folders yet — they'll appear here as you record notes, or tap + below to add one yourself.
         </Text>
       )}
+
       <ScrollView contentContainerStyle={styles.content}>
         {tree.children.map(folder => (
           <FolderRow
@@ -79,13 +96,54 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
           />
         ))}
       </ScrollView>
+
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setModalVisible(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.fabIcon}>+</Text>
+      </TouchableOpacity>
+
+      <Modal visible={modalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>New folder</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Folder name"
+              placeholderTextColor={COLORS.brownFaint}
+              value={nameInput}
+              onChangeText={setNameInput}
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => { setNameInput(''); setModalVisible(false); }}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalCreate} onPress={submitFolder}>
+                <Text style={styles.modalCreateText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  content: { paddingVertical: 8 },
+  content: { paddingVertical: 8, paddingBottom: 90 },
+  empty: {
+    padding: 20,
+    fontSize: FONTS.size.md,
+    color: COLORS.brownFaint,
+    textAlign: 'center',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -99,4 +157,62 @@ const styles = StyleSheet.create({
   rowName: { flex: 1, fontSize: FONTS.size.md, color: COLORS.brown },
   rowCount: { fontSize: FONTS.size.xs, color: COLORS.brownFaint },
   rowChevron: { fontSize: 20, color: COLORS.brownFaint, lineHeight: 22 },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.brown,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  fabIcon: { fontSize: 26, color: COLORS.bg, marginTop: -2 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBox: {
+    width: '80%',
+    backgroundColor: COLORS.bg,
+    borderRadius: 14,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: FONTS.size.lg,
+    fontWeight: '600',
+    color: COLORS.brown,
+    marginBottom: 12,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: FONTS.size.md,
+    color: COLORS.brown,
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalCancel: { paddingVertical: 8, paddingHorizontal: 12 },
+  modalCancelText: { fontSize: FONTS.size.md, color: COLORS.brownFaint },
+  modalCreate: {
+    backgroundColor: COLORS.brown,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+  },
+  modalCreateText: { fontSize: FONTS.size.md, color: COLORS.bg, fontWeight: '600' },
 });
