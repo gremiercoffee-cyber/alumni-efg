@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "NoteKeeper",
+    "slug": "notekeeper",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.gremier.notekeeper",
+      "permissions": ["RECORD_AUDIO"]
+    },
+    "plugins": [
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow NoteKeeper to access your microphone to record notes."
+        }
+      ]
+    ]
+  }
+}
