@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Modal,
-  View,
-  Text,
-  TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { COLORS, FONTS } from '../constants';
 
@@ -24,111 +24,205 @@ interface Props {
   onClose: () => void;
 }
 
+interface CalendarDay {
+  label: number;
+  isoDate: string;
+  entries: ScheduleEntry[];
+  isCurrentMonth: boolean;
+}
+
+function parseEntryDate(due: string): Date | null {
+  const parsed = Date.parse(due);
+  return Number.isNaN(parsed) ? null : new Date(parsed);
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 export default function ScheduleDrawer({ visible, routineText, entries, onClose }: Props) {
-  const today = entries.filter(entry => entry.bucket === 'today');
-  const soon = entries.filter(entry => entry.bucket === 'soon');
-  const later = entries.filter(entry => entry.bucket === 'later');
+  const [currentMonth, setCurrentMonth] = useState(() => new Date());
+
+  const calendarDays = useMemo(() => {
+    const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    const gridStart = new Date(start);
+    gridStart.setDate(start.getDate() - start.getDay());
+    const gridEnd = new Date(end);
+    gridEnd.setDate(end.getDate() + (6 - end.getDay()));
+
+    const days: CalendarDay[] = [];
+    for (const date = new Date(gridStart); date <= gridEnd; date.setDate(date.getDate() + 1)) {
+      const current = new Date(date);
+      const dayEntries = entries.filter(entry => {
+        const parsed = parseEntryDate(entry.due);
+        return parsed ? sameDay(parsed, current) : false;
+      });
+      days.push({
+        label: current.getDate(),
+        isoDate: current.toISOString(),
+        entries: dayEntries,
+        isCurrentMonth: current.getMonth() === currentMonth.getMonth(),
+      });
+    }
+    return days;
+  }, [currentMonth, entries]);
+
+  const monthLabel = currentMonth.toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const monthEntries = useMemo(() => {
+    return entries
+      .filter(entry => {
+        const parsed = parseEntryDate(entry.due);
+        return parsed
+          ? parsed.getMonth() === currentMonth.getMonth() &&
+              parsed.getFullYear() === currentMonth.getFullYear()
+          : true;
+      })
+      .sort((a, b) => {
+        const first = parseEntryDate(a.due)?.getTime() || 0;
+        const second = parseEntryDate(b.due)?.getTime() || 0;
+        return first - second;
+      });
+  }, [currentMonth, entries]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
-        <View style={styles.drawer}>
-          <View style={styles.header}>
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.screen}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() =>
+              setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+            }
+            activeOpacity={0.8}
+          >
+            <Text style={styles.navText}>Prev</Text>
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
             <Text style={styles.title}>Schedule</Text>
-            <TouchableOpacity onPress={onClose} activeOpacity={0.7} style={styles.closeBtn}>
-              <Text style={styles.closeText}>Close</Text>
-            </TouchableOpacity>
+            <Text style={styles.monthLabel}>{monthLabel}</Text>
+          </View>
+          <TouchableOpacity
+            onPress={() =>
+              setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+            }
+            activeOpacity={0.8}
+          >
+            <Text style={styles.navText}>Next</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.content}>
+          {routineText ? (
+            <View style={styles.routineCard}>
+              <Text style={styles.sectionLabel}>LEARNED ROUTINE</Text>
+              <Text style={styles.routineText}>{routineText}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.calendarCard}>
+            <Text style={styles.sectionLabel}>MONTH VIEW</Text>
+            <View style={styles.weekHeader}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                <Text key={day} style={styles.weekHeaderText}>{day}</Text>
+              ))}
+            </View>
+            <View style={styles.grid}>
+              {calendarDays.map(day => (
+                <View
+                  key={day.isoDate}
+                  style={[styles.dayCell, !day.isCurrentMonth && styles.dayCellMuted]}
+                >
+                  <Text style={[styles.dayNumber, !day.isCurrentMonth && styles.dayNumberMuted]}>
+                    {day.label}
+                  </Text>
+                  {day.entries.slice(0, 2).map(entry => (
+                    <View key={entry.id} style={styles.dayDotWrap}>
+                      <Text style={styles.dayDot} numberOfLines={1}>• {entry.title}</Text>
+                    </View>
+                  ))}
+                  {day.entries.length > 2 ? (
+                    <Text style={styles.moreText}>+{day.entries.length - 2} more</Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
           </View>
 
-          <ScrollView contentContainerStyle={styles.content}>
-            {routineText ? (
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>ROUTINE</Text>
-                <Text style={styles.routine}>{routineText}</Text>
-              </View>
-            ) : null}
+          <View style={styles.listCard}>
+            <Text style={styles.sectionLabel}>THIS MONTH</Text>
+            {monthEntries.length === 0 ? (
+              <Text style={styles.empty}>No scheduled items yet.</Text>
+            ) : (
+              monthEntries.map(entry => (
+                <View key={entry.id} style={styles.entryCard}>
+                  <Text style={styles.entryTitle}>{entry.title}</Text>
+                  <Text style={styles.entrySubtitle}>{entry.subtitle}</Text>
+                  <Text style={styles.entryDue}>{entry.due}</Text>
+                </View>
+              ))
+            )}
+          </View>
+        </ScrollView>
 
-            <Section title="TODAY" entries={today} emptyText="Nothing due today yet." />
-            <Section title="COMING UP" entries={soon} emptyText="Nothing scheduled soon." />
-            <Section title="LATER" entries={later} emptyText="Nothing parked for later." />
-          </ScrollView>
-        </View>
+        <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.85}>
+          <Text style={styles.closeText}>Close schedule</Text>
+        </TouchableOpacity>
       </View>
     </Modal>
   );
 }
 
-function Section({
-  title,
-  entries,
-  emptyText,
-}: {
-  title: string;
-  entries: ScheduleEntry[];
-  emptyText: string;
-}) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionLabel}>{title}</Text>
-      {entries.length === 0 ? (
-        <Text style={styles.empty}>{emptyText}</Text>
-      ) : (
-        entries.map(entry => (
-          <View key={entry.id} style={styles.card}>
-            <Text style={styles.cardTitle}>{entry.title}</Text>
-            <Text style={styles.cardSubtitle}>{entry.subtitle}</Text>
-            <Text style={styles.cardDue}>{entry.due}</Text>
-          </View>
-        ))
-      )}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  overlay: {
+  screen: {
     flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.22)',
-  },
-  backdrop: {
-    flex: 1,
-  },
-  drawer: {
-    width: '82%',
-    maxWidth: 360,
     backgroundColor: COLORS.bg,
     paddingTop: 28,
-    paddingHorizontal: 18,
-    paddingBottom: 24,
-    borderLeftWidth: 1,
-    borderLeftColor: COLORS.border,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  headerCenter: {
+    alignItems: 'center',
   },
   title: {
     fontSize: 28,
     fontWeight: '700',
     color: COLORS.brown,
   },
-  closeBtn: {
-    paddingVertical: 6,
-  },
-  closeText: {
+  monthLabel: {
     fontSize: FONTS.size.sm,
     color: COLORS.brownLight,
+    marginTop: 2,
+  },
+  navText: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.brown,
+    fontWeight: '600',
   },
   content: {
-    paddingBottom: 20,
+    padding: 16,
+    paddingBottom: 110,
+    gap: 14,
   },
-  section: {
-    marginBottom: 20,
+  routineCard: {
+    backgroundColor: COLORS.white50,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
   },
   sectionLabel: {
     fontSize: FONTS.size.xs,
@@ -136,37 +230,111 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
     marginBottom: 8,
   },
-  routine: {
+  routineText: {
     fontSize: FONTS.size.sm,
     color: COLORS.brownMid,
     lineHeight: 20,
   },
-  empty: {
-    fontSize: FONTS.size.sm,
-    color: COLORS.brownFaint,
-    lineHeight: 20,
-  },
-  card: {
+  calendarCard: {
     backgroundColor: COLORS.white50,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
-    borderRadius: 8,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+  },
+  weekHeader: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  weekHeaderText: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 10,
+    color: COLORS.brownLight,
+    fontWeight: '600',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  dayCell: {
+    width: '13.4%',
+    minHeight: 76,
+    backgroundColor: COLORS.bgAlt,
+    borderRadius: 10,
+    padding: 6,
+  },
+  dayCellMuted: {
+    opacity: 0.45,
+  },
+  dayNumber: {
+    fontSize: 12,
+    color: COLORS.brown,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  dayNumberMuted: {
+    color: COLORS.brownLight,
+  },
+  dayDotWrap: {
+    marginBottom: 2,
+  },
+  dayDot: {
+    fontSize: 8,
+    color: COLORS.brownMid,
+  },
+  moreText: {
+    fontSize: 8,
+    color: COLORS.brownLight,
+    marginTop: 2,
+  },
+  listCard: {
+    backgroundColor: COLORS.white50,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 12,
+    padding: 14,
+  },
+  entryCard: {
+    backgroundColor: COLORS.bgAlt,
+    borderRadius: 10,
     padding: 12,
     marginBottom: 8,
   },
-  cardTitle: {
+  entryTitle: {
     fontSize: FONTS.size.sm,
     fontWeight: '600',
     color: COLORS.brown,
   },
-  cardSubtitle: {
+  entrySubtitle: {
     fontSize: FONTS.size.xs,
     color: COLORS.brownLight,
     marginTop: 3,
   },
-  cardDue: {
+  entryDue: {
     fontSize: FONTS.size.xs,
     color: COLORS.brownFaint,
     marginTop: 6,
+  },
+  empty: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.brownFaint,
+  },
+  closeBtn: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 20,
+    backgroundColor: COLORS.brown,
+    borderRadius: 28,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  closeText: {
+    color: COLORS.bg,
+    fontSize: FONTS.size.md,
+    fontWeight: '700',
   },
 });

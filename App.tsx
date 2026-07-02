@@ -872,7 +872,7 @@ export default function App() {
               onPress={() => setScheduleOpen(true)}
               activeOpacity={0.85}
             >
-              <Text style={styles.scheduleHandleText}>Plan</Text>
+              <Text style={styles.scheduleHandleText}>Schedule</Text>
             </TouchableOpacity>
             <TabBar
               active={tab}
