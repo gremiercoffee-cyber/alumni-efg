@@ -142,7 +142,7 @@ For an explicit to-do dump, use exactly this shape:
   "existingTodoListId": "id of best matching running to-do list, or null",
   "newTodoListTitle": "short list title if no existing list fits, otherwise null",
   "todoItems": [
-    { "text": "one concrete task starting with a verb", "due": "natural language reminder suggestion like 'Today 5 PM', 'Tomorrow morning', 'Fri Jul 4 at 2 PM', or null" }
+    { "text": "one concise sticky-note style task", "due": "natural language reminder suggestion like 'Today 5 PM', 'Tomorrow morning', 'Fri Jul 4 at 2 PM', or null" }
   ]
 }
 
@@ -150,6 +150,11 @@ Rules:
 - Use contentType "todo_items" only when the person is clearly rattling off tasks they need to do. Meeting recaps, thoughts, ideas, and summaries are notes even if they imply follow-up actions.
 - For notes, infer action items when the content implies something needs to happen.
 - For to-do items, split the transcript into discrete checklist items and do not also return actionItems.
+- Every todoItems[].text must read like a handwritten list item or sticky note: shortest possible phrasing that still keeps the full intent.
+- Remove filler and spoken framing such as "I need to", "don't forget to", "I should", "we need to", "I have to", "look into", and similar prefixes unless a word is truly required for meaning.
+- If the core task is best expressed as a noun phrase, use a noun phrase. If it is best expressed as an action, use a short action phrase.
+- Prefer compact phrasing such as "Tin foil", "Send Avi study materials", "Call bottle supplier re: pricing", "New keyboard for office".
+- If the speaker says multiple tasks in one sentence or recording, return one array item per task. Never bundle X, Y, and Z into a single todoItems entry.
 - For due dates, use urgency rules when provided. For to-do items, think of due as the best default reminder time suggestion. If no urgency is implied, leave due as null.
 - Prefer an existing folder when it fits. If none fits, propose a new folder under the closest parent.
 - For to-do items, prefer an existing running to-do list when it fits. Otherwise provide newTodoListTitle.
