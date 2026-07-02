@@ -49,6 +49,8 @@ export default function RecordingScreen({
 }: Props) {
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(true);
+  const [ready, setReady] = useState(false);
   const [stopping, setStopping] = useState(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -69,8 +71,6 @@ export default function RecordingScreen({
 
   useEffect(() => {
     startPromiseRef.current = startRecording();
-    timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
-
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -78,9 +78,31 @@ export default function RecordingScreen({
     };
   }, []);
 
+  useEffect(() => {
+    if (!ready || stopping) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      return;
+    }
+
+    timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [ready, stopping]);
+
   const startRecording = async () => {
     try {
       setError(null);
+      setStarting(true);
+      setReady(false);
+      setSeconds(0);
 
       const permission = await Audio.requestPermissionsAsync();
       console.log('Audio.requestPermissionsAsync result', permission);
@@ -102,20 +124,45 @@ export default function RecordingScreen({
       });
       console.log('Audio mode configured for recording');
 
-      const { recording } = await Audio.Recording.createAsync(recordingOptions);
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(recordingOptions);
+      await recording.startAsync();
+      const status = await recording.getStatusAsync();
+      console.log('Audio recording started', status);
+
+      if (!status.isRecording) {
+        throw new Error('The microphone did not enter an active recording state.');
+      }
+
       console.log('Audio recording created successfully', { callMode, target });
       recordingRef.current = recording;
+      setReady(true);
     } catch (e: unknown) {
       reportError('Could not start recording.', e);
+    } finally {
+      setStarting(false);
     }
   };
 
   const stopRecording = async () => {
     if (stopping) return;
 
+    if (starting) {
+      const msg = 'Microphone is still starting. Please wait a moment, then try stopping again.';
+      setError(msg);
+      onError(msg);
+      return;
+    }
+
+    if (!ready) {
+      const msg = 'Recording never fully started. Please try again.';
+      setError(msg);
+      onError(msg);
+      return;
+    }
+
     setStopping(true);
     setError(null);
-    onBeginProcessing();
     console.log('Stop recording tapped');
 
     if (startPromiseRef.current) {
@@ -128,10 +175,19 @@ export default function RecordingScreen({
 
     try {
       if (!recordingRef.current) {
+        setReady(false);
         setStopping(false);
         return;
       }
 
+      const status = await recordingRef.current.getStatusAsync();
+      console.log('Recording status before stop', status);
+
+      if ('durationMillis' in status && (status.durationMillis ?? 0) < 350) {
+        throw new Error('Recording was too short. Speak for a moment, then try again.');
+      }
+
+      onBeginProcessing();
       console.log('Stopping and unloading recording');
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
@@ -144,6 +200,7 @@ export default function RecordingScreen({
       onComplete(uri);
     } catch (e: unknown) {
       reportError('Error stopping recording.', e);
+      setReady(false);
       setStopping(false);
     }
   };
@@ -156,7 +213,13 @@ export default function RecordingScreen({
       <View style={styles.statusRow}>
         <View style={styles.dot} />
         <Text style={styles.statusText}>
-          {stopping ? 'Preparing your note' : callMode ? 'Recording call (speaker)' : 'Recording'}
+          {stopping
+            ? 'Preparing your note'
+            : starting
+            ? 'Starting microphone'
+            : callMode
+            ? 'Recording call (speaker)'
+            : 'Recording'}
         </Text>
       </View>
 
@@ -182,10 +245,12 @@ export default function RecordingScreen({
         <Text style={styles.error}>{error}</Text>
       ) : (
         <View style={styles.actionArea}>
-          {stopping ? (
+          {stopping || starting ? (
             <View style={styles.processingWrap}>
               <ActivityIndicator size="large" color={COLORS.brown} />
-              <Text style={styles.processingText}>Saving recording...</Text>
+              <Text style={styles.processingText}>
+                {stopping ? 'Saving recording...' : 'Starting microphone...'}
+              </Text>
             </View>
           ) : (
             <TouchableOpacity
@@ -202,6 +267,8 @@ export default function RecordingScreen({
       <Text style={styles.hint}>
         {stopping
           ? 'One moment while the recording is saved.'
+          : starting
+          ? 'Getting the microphone ready.'
           : callMode
           ? 'Listening through the speaker, tap to stop.'
           : 'Tap to stop. Recording continues if you switch apps.'}
