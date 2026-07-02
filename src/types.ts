@@ -72,6 +72,8 @@ export interface TodoItem {
   id: string;
   text: string;
   due: string | null;
+  reminderAt: number | null;
+  notificationId: string | null;
   done: boolean;
   ts: number;
 }
@@ -87,6 +89,8 @@ export interface TodoList {
 export interface AppSettings {
   openaiKey: string;
   anthropicKey: string;
+  microphonePermissionAsked?: boolean;
+  notificationsPermissionAsked?: boolean;
   areas: string;
   schedule: string;
   coffee: string;

@@ -13,6 +13,7 @@ import TopBar from '../components/TopBar';
 import { COLORS, FONTS } from '../constants';
 import { AppSettings } from '../types';
 import { transcribeAudio } from '../lib/transcribe';
+import { requestReminderPermissions } from '../lib/reminders';
 
 interface Props {
   settings: AppSettings;
@@ -153,6 +154,36 @@ export default function SettingsScreen({ settings, onSave }: Props) {
     Alert.alert('Saved', 'Settings saved.');
   };
 
+  const requestMicAccess = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      Alert.alert(
+        permission.granted ? 'Microphone ready' : 'Microphone still off',
+        permission.granted
+          ? 'Recording should start much faster now.'
+          : 'Enable Microphone in Android Settings > Apps > NoteKeeper > Permissions.'
+      );
+      setDraft(current => ({ ...current, microphonePermissionAsked: true }));
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Could not request microphone permission.');
+    }
+  };
+
+  const requestNotificationAccess = async () => {
+    try {
+      const granted = await requestReminderPermissions();
+      Alert.alert(
+        granted ? 'Reminders ready' : 'Notifications still off',
+        granted
+          ? 'To-do reminders can now send notifications.'
+          : 'Enable notifications in Android Settings if you want reminders to alert you.'
+      );
+      setDraft(current => ({ ...current, notificationsPermissionAsked: true }));
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Could not request notification permission.');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <TopBar subtitle="Configure" title="Settings" />
@@ -174,6 +205,15 @@ export default function SettingsScreen({ settings, onSave }: Props) {
             autoCapitalize="none"
             secureTextEntry
           />
+        </View>
+
+        <View style={styles.permissionRow}>
+          <TouchableOpacity style={styles.permissionBtn} onPress={requestMicAccess} activeOpacity={0.8}>
+            <Text style={styles.permissionBtnText}>Enable microphone</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.permissionBtn} onPress={requestNotificationAccess} activeOpacity={0.8}>
+            <Text style={styles.permissionBtnText}>Enable reminders</Text>
+          </TouchableOpacity>
         </View>
 
         {SECTIONS.map(s => (
@@ -260,6 +300,25 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: FONTS.size.md,
     color: '#f6f1e3',
+    fontWeight: '600',
+  },
+  permissionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 18,
+  },
+  permissionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: COLORS.white60,
+  },
+  permissionBtnText: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.brown,
     fontWeight: '600',
   },
 });

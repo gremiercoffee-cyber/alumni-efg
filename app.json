@@ -10,7 +10,8 @@
       "permissions": [
         "RECORD_AUDIO",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
@@ -20,6 +21,7 @@
           "microphonePermission": "Allow NoteKeeper to access your microphone to record notes."
         }
       ],
+      "expo-notifications",
       "expo-asset"
     ],
     "extra": {

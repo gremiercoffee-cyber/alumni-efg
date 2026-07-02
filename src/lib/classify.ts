@@ -142,7 +142,7 @@ For an explicit to-do dump, use exactly this shape:
   "existingTodoListId": "id of best matching running to-do list, or null",
   "newTodoListTitle": "short list title if no existing list fits, otherwise null",
   "todoItems": [
-    { "text": "one concrete task starting with a verb", "due": "natural language due date/time or null" }
+    { "text": "one concrete task starting with a verb", "due": "natural language reminder suggestion like 'Today 5 PM', 'Tomorrow morning', 'Fri Jul 4 at 2 PM', or null" }
   ]
 }
 
@@ -150,7 +150,7 @@ Rules:
 - Use contentType "todo_items" only when the person is clearly rattling off tasks they need to do. Meeting recaps, thoughts, ideas, and summaries are notes even if they imply follow-up actions.
 - For notes, infer action items when the content implies something needs to happen.
 - For to-do items, split the transcript into discrete checklist items and do not also return actionItems.
-- For due dates, use urgency rules when provided. If no urgency is implied, leave due as null.
+- For due dates, use urgency rules when provided. For to-do items, think of due as the best default reminder time suggestion. If no urgency is implied, leave due as null.
 - Prefer an existing folder when it fits. If none fits, propose a new folder under the closest parent.
 - For to-do items, prefer an existing running to-do list when it fits. Otherwise provide newTodoListTitle.
 - Output strictly valid JSON only.`;

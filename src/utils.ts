@@ -75,6 +75,17 @@ export function makeId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+export function findFolderByName(node: FolderNode, name: string): FolderNode | null {
+  if (node.name.trim().toLowerCase() === name.trim().toLowerCase()) {
+    return node;
+  }
+  for (const child of node.children || []) {
+    const found = findFolderByName(child, name);
+    if (found) return found;
+  }
+  return null;
+}
+
 export function extractFirstUrl(text: string): string | null {
   const match = text.match(/https?:\/\/[^\s<>"']+/i);
   return match ? match[0].replace(/[),.;!?]+$/, '') : null;
@@ -105,4 +116,76 @@ export function classifyDueBucket(due: string | null): 'today' | 'soon' | 'later
     return 'soon';
   }
   return 'later';
+}
+
+export function formatReminderLabel(ts: number | null): string | null {
+  if (!ts) return null;
+  return new Date(ts).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+export function parseSuggestedReminder(input: string | null): number | null {
+  if (!input) return null;
+  const value = input.trim().toLowerCase();
+  if (!value) return null;
+
+  const now = new Date();
+  const base = new Date(now);
+  base.setSeconds(0, 0);
+  base.setMinutes(Math.ceil(base.getMinutes() / 5) * 5);
+  if (base <= now) {
+    base.setMinutes(base.getMinutes() + 5);
+  }
+
+  const setTime = (date: Date, hours: number, minutes = 0) => {
+    date.setHours(hours, minutes, 0, 0);
+    if (date <= now) {
+      date.setDate(date.getDate() + 1);
+    }
+    return date.getTime();
+  };
+
+  const weekdayMap: Record<string, number> = {
+    sun: 0,
+    sunday: 0,
+    mon: 1,
+    monday: 1,
+    tue: 2,
+    tuesday: 2,
+    wed: 3,
+    wednesday: 3,
+    thu: 4,
+    thursday: 4,
+    fri: 5,
+    friday: 5,
+    sat: 6,
+    saturday: 6,
+  };
+
+  if (value.includes('asap')) return base.getTime();
+  if (value.includes('today')) return setTime(new Date(now), 18, 0);
+  if (value.includes('tonight')) return setTime(new Date(now), 20, 0);
+  if (value.includes('this afternoon')) return setTime(new Date(now), 15, 0);
+  if (value.includes('this evening')) return setTime(new Date(now), 19, 0);
+  if (value.includes('tomorrow')) {
+    const date = new Date(now);
+    date.setDate(date.getDate() + 1);
+    return setTime(date, 9, 0);
+  }
+
+  for (const [label, day] of Object.entries(weekdayMap)) {
+    if (value.includes(label)) {
+      const date = new Date(now);
+      const diff = (day - date.getDay() + 7) % 7 || 7;
+      date.setDate(date.getDate() + diff);
+      return setTime(date, 9, 0);
+    }
+  }
+
+  const absolute = Date.parse(input);
+  return Number.isNaN(absolute) ? null : absolute;
 }

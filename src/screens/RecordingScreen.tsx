@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  InteractionManager,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -104,16 +105,25 @@ export default function RecordingScreen({
       setReady(false);
       setSeconds(0);
 
-      const permission = await Audio.requestPermissionsAsync();
-      console.log('Audio.requestPermissionsAsync result', permission);
+      const permission = await Audio.getPermissionsAsync();
+      console.log('Audio.getPermissionsAsync result', permission);
+      const resolvedPermission = permission.granted
+        ? permission
+        : await Audio.requestPermissionsAsync();
 
-      if (!permission.granted) {
+      console.log('Audio.requestPermissionsAsync result', resolvedPermission);
+
+      if (!resolvedPermission.granted) {
         const msg =
           'Microphone access is off. Open Android Settings > Apps > NoteKeeper > Permissions and enable Microphone, then try again.';
         setError(msg);
         onError(msg);
         return;
       }
+
+      await new Promise<void>(resolve => {
+        InteractionManager.runAfterInteractions(() => resolve());
+      });
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,

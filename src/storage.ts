@@ -7,6 +7,7 @@ const LEGACY_KEYS = ['notekeeper:state:v1'];
 
 interface AppState {
   tree?: FolderNode;
+  todoTree?: FolderNode;
   keeperTree?: FolderNode;
   notes?: Note[];
   keeperItems?: KeeperItem[];
@@ -59,6 +60,15 @@ export async function loadAppState(): Promise<AppState | null> {
 
     return {
       ...state,
+      todoTree: state.todoTree || state.tree,
+      todoLists: (state.todoLists || []).map(list => ({
+        ...list,
+        items: (list.items || []).map(item => ({
+          ...item,
+          reminderAt: item.reminderAt ?? null,
+          notificationId: item.notificationId ?? null,
+        })),
+      })),
       keeperItems: state.keeperItems || migrateLegacyLinks(state.savedLinks || []),
       settings: mergeNonEmptySettings(recoveredSettings, state.settings || {}),
     };
@@ -88,6 +98,9 @@ function mergeNonEmptySettings(
   const merged: Partial<AppSettings> = { ...base };
   Object.entries(override).forEach(([key, value]) => {
     if (typeof value === 'string' && value.length > 0) {
+      merged[key as keyof AppSettings] = value;
+    }
+    if (typeof value === 'boolean') {
       merged[key as keyof AppSettings] = value;
     }
   });

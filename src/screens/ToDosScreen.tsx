@@ -1,20 +1,25 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import TopBar from '../components/TopBar';
 import { COLORS, FONTS } from '../constants';
-import { countNotes } from '../utils';
+import { countNotes, formatReminderLabel } from '../utils';
 import { FolderNode, TodoList } from '../types';
 
 interface Props {
   tree: FolderNode;
   todoLists: TodoList[];
+  focusedFolderId?: string | null;
+  focusedListId?: string | null;
   onToggle: (listId: string, itemId: string) => void;
+  onAddItem: (listId: string, text: string) => void;
+  onEditReminder: (listId: string, itemId: string) => void;
 }
 
 function openItemCount(lists: TodoList[]): number {
@@ -80,14 +85,147 @@ function FolderTodoRow({
   );
 }
 
-export default function ToDosScreen({ tree, todoLists, onToggle }: Props) {
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+function TodoListCard({
+  list,
+  focused,
+  onToggle,
+  onAddItem,
+  onEditReminder,
+  completedExpanded,
+  onToggleCompletedExpanded,
+}: {
+  list: TodoList;
+  focused: boolean;
+  onToggle: (listId: string, itemId: string) => void;
+  onAddItem: (listId: string, text: string) => void;
+  onEditReminder: (listId: string, itemId: string) => void;
+  completedExpanded: boolean;
+  onToggleCompletedExpanded: () => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<TextInput | null>(null);
+  const activeItems = list.items.filter(item => !item.done);
+  const completedItems = list.items.filter(item => item.done);
+
+  const submit = () => {
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    onAddItem(list.id, trimmed);
+    setDraft('');
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  return (
+    <View style={[styles.list, focused && styles.listFocused]}>
+      <Text style={styles.listTitle}>{list.title}</Text>
+
+      {activeItems.length === 0 ? (
+        <Text style={styles.emptyList}>No open items. Add one below.</Text>
+      ) : (
+        activeItems.map(item => (
+          <TouchableOpacity
+            key={item.id}
+            style={styles.itemRow}
+            onPress={() => onToggle(list.id, item.id)}
+            activeOpacity={0.75}
+          >
+            <View style={styles.checkbox} />
+            <View style={styles.itemTextWrap}>
+              <Text style={styles.itemText}>{item.text}</Text>
+              {(item.reminderAt || item.due) ? (
+                <TouchableOpacity
+                  style={styles.reminderPill}
+                  onPress={() => onEditReminder(list.id, item.id)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.reminderText}>
+                    {formatReminderLabel(item.reminderAt) || item.due}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={() => onEditReminder(list.id, item.id)} activeOpacity={0.8}>
+                  <Text style={styles.addReminderText}>Add reminder</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </TouchableOpacity>
+        ))
+      )}
+
+      <View style={styles.manualEntry}>
+        <TextInput
+          ref={inputRef}
+          style={styles.manualInput}
+          value={draft}
+          onChangeText={setDraft}
+          onSubmitEditing={submit}
+          placeholder="Add an item"
+          placeholderTextColor={COLORS.brownFaint}
+          returnKeyType="done"
+        />
+        <TouchableOpacity style={styles.addBtn} onPress={submit} activeOpacity={0.8}>
+          <Text style={styles.addBtnText}>+</Text>
+        </TouchableOpacity>
+      </View>
+
+      {completedItems.length > 0 ? (
+        <View style={styles.completedWrap}>
+          <TouchableOpacity
+            style={styles.completedHeader}
+            onPress={onToggleCompletedExpanded}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.completedHeaderText}>
+              {completedExpanded ? 'Hide' : 'Show'} Completed ({completedItems.length})
+            </Text>
+          </TouchableOpacity>
+          {completedExpanded
+            ? completedItems.map(item => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.itemRow}
+                  onPress={() => onToggle(list.id, item.id)}
+                  activeOpacity={0.75}
+                >
+                  <View style={[styles.checkbox, styles.checkboxDone]}>
+                    <Text style={styles.checkmark}>x</Text>
+                  </View>
+                  <View style={styles.itemTextWrap}>
+                    <Text style={[styles.itemText, styles.itemDone]}>{item.text}</Text>
+                    <Text style={styles.restoreText}>Tap to move back to active</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+export default function ToDosScreen({
+  tree,
+  todoLists,
+  focusedFolderId = null,
+  focusedListId = null,
+  onToggle,
+  onAddItem,
+  onEditReminder,
+}: Props) {
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(focusedFolderId);
+  const [expandedCompleted, setExpandedCompleted] = useState<Record<string, boolean>>({});
   const selectedFolder = selectedFolderId ? findFolder(tree, selectedFolderId) : null;
   const selectedIds = selectedFolder ? collectFolderIds(selectedFolder) : null;
   const activeLists = selectedFolderId
     ? todoLists.filter(list => selectedIds?.has(list.folderId))
     : todoLists;
   const open = openItemCount(todoLists);
+
+  useEffect(() => {
+    if (focusedFolderId) {
+      setSelectedFolderId(focusedFolderId);
+    }
+  }, [focusedFolderId]);
 
   return (
     <View style={styles.container}>
@@ -127,25 +265,21 @@ export default function ToDosScreen({ tree, todoLists, onToggle }: Props) {
           </Text>
         ) : (
           activeLists.map(list => (
-            <View key={list.id} style={styles.list}>
-              <Text style={styles.listTitle}>{list.title}</Text>
-              {list.items.map(item => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.itemRow}
-                  onPress={() => onToggle(list.id, item.id)}
-                  activeOpacity={0.75}
-                >
-                  <View style={[styles.checkbox, item.done && styles.checkboxDone]}>
-                    {item.done && <Text style={styles.checkmark}>x</Text>}
-                  </View>
-                  <View style={styles.itemTextWrap}>
-                    <Text style={[styles.itemText, item.done && styles.itemDone]}>{item.text}</Text>
-                    {item.due && <Text style={styles.itemDue}>{item.due}</Text>}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <TodoListCard
+              key={list.id}
+              list={list}
+              focused={focusedListId === list.id}
+              onToggle={onToggle}
+              onAddItem={onAddItem}
+              onEditReminder={onEditReminder}
+              completedExpanded={!!expandedCompleted[list.id]}
+              onToggleCompletedExpanded={() =>
+                setExpandedCompleted(current => ({
+                  ...current,
+                  [list.id]: !current[list.id],
+                }))
+              }
+            />
           ))
         )}
       </ScrollView>
@@ -209,12 +343,24 @@ const styles = StyleSheet.create({
   },
   list: {
     marginBottom: 18,
+    backgroundColor: 'rgba(255,255,255,0.24)',
+    borderRadius: 12,
+    padding: 12,
+  },
+  listFocused: {
+    borderWidth: 1,
+    borderColor: COLORS.brown,
   },
   listTitle: {
     fontSize: FONTS.size.md,
     fontWeight: '700',
     color: COLORS.brown,
     marginBottom: 8,
+  },
+  emptyList: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.brownFaint,
+    marginBottom: 10,
   },
   itemRow: {
     flexDirection: 'row',
@@ -251,9 +397,67 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: COLORS.brownFaint,
   },
-  itemDue: {
+  reminderPill: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    backgroundColor: COLORS.cream,
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  reminderText: {
     fontSize: FONTS.size.xs,
+    color: COLORS.brown,
+  },
+  addReminderText: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.red,
+    marginTop: 6,
+  },
+  manualEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  manualInput: {
+    flex: 1,
+    backgroundColor: COLORS.white60,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: FONTS.size.md,
+    color: COLORS.brown,
+  },
+  addBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.brown,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBtnText: {
+    color: COLORS.bg,
+    fontSize: 24,
+    lineHeight: 24,
+  },
+  completedWrap: {
+    marginTop: 10,
+  },
+  completedHeader: {
+    paddingVertical: 8,
+  },
+  completedHeaderText: {
+    fontSize: FONTS.size.sm,
     color: COLORS.brownLight,
-    marginTop: 3,
+    fontWeight: '600',
+  },
+  restoreText: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brownFaint,
+    marginTop: 4,
   },
 });
