@@ -86,6 +86,59 @@ export function findFolderByName(node: FolderNode, name: string): FolderNode | n
   return null;
 }
 
+export function renameFolder(
+  tree: FolderNode,
+  folderId: string,
+  nextName: string
+): FolderNode {
+  const newTree: FolderNode = JSON.parse(JSON.stringify(tree));
+  const target = findNode(newTree, folderId);
+  if (target && target.id !== 'root') {
+    target.name = nextName;
+  }
+  return newTree;
+}
+
+export function collectFolderIds(node: FolderNode, ids = new Set<string>()): Set<string> {
+  ids.add(node.id);
+  for (const child of node.children || []) {
+    collectFolderIds(child, ids);
+  }
+  return ids;
+}
+
+export function deleteFolder(
+  tree: FolderNode,
+  folderId: string
+): FolderNode {
+  if (folderId === 'root') return tree;
+  const newTree: FolderNode = JSON.parse(JSON.stringify(tree));
+
+  const removeFrom = (node: FolderNode): boolean => {
+    const index = (node.children || []).findIndex(child => child.id === folderId);
+    if (index >= 0) {
+      node.children.splice(index, 1);
+      return true;
+    }
+    return (node.children || []).some(child => removeFrom(child));
+  };
+
+  removeFrom(newTree);
+  return newTree;
+}
+
+export function ensureFolder(
+  tree: FolderNode,
+  folderName: string,
+  parentId = 'root'
+): { tree: FolderNode; id: string } {
+  const existing = findFolderByName(tree, folderName);
+  if (existing) {
+    return { tree, id: existing.id };
+  }
+  return addChildFolder(tree, parentId, folderName);
+}
+
 export function extractFirstUrl(text: string): string | null {
   const match = text.match(/https?:\/\/[^\s<>"']+/i);
   return match ? match[0].replace(/[),.;!?]+$/, '') : null;

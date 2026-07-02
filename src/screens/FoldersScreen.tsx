@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
+  Alert,
   Modal,
-  TextInput,
+  ScrollView,
   StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import TopBar from '../components/TopBar';
 import { COLORS, FONTS } from '../constants';
@@ -18,6 +19,8 @@ interface Props {
   notes: Note[];
   onOpenFolder: (folder: FolderNode) => void;
   onAddFolder: (name: string) => void;
+  onRenameFolder: (folderId: string, name: string) => void;
+  onDeleteFolder: (folderId: string) => void;
 }
 
 function FolderRow({
@@ -25,11 +28,15 @@ function FolderRow({
   notes,
   depth,
   onOpenFolder,
+  onRenameFolder,
+  onDeleteFolder,
 }: {
   folder: FolderNode;
   notes: Note[];
   depth: number;
   onOpenFolder: (f: FolderNode) => void;
+  onRenameFolder: (folderId: string, name: string) => void;
+  onDeleteFolder: (folderId: string) => void;
 }) {
   const notesByFolder: Record<string, number> = {};
   notes.forEach(n => {
@@ -37,14 +44,24 @@ function FolderRow({
   });
   const total = countNotes(folder, notesByFolder);
 
+  const showActions = () => {
+    Alert.alert(folder.name, 'Choose an action', [
+      { text: 'Rename', onPress: () => onRenameFolder(folder.id, folder.name) },
+      { text: 'Delete', style: 'destructive', onPress: () => onDeleteFolder(folder.id) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   return (
     <>
       <TouchableOpacity
         style={[styles.row, { paddingLeft: 20 + depth * 16 }]}
         onPress={() => onOpenFolder(folder)}
+        onLongPress={showActions}
+        delayLongPress={220}
         activeOpacity={0.7}
       >
-        <Text style={styles.rowIcon}>📁</Text>
+        <Text style={styles.rowIcon}>Folder</Text>
         <Text style={styles.rowName}>{folder.name}</Text>
         {total > 0 && <Text style={styles.rowCount}>{total}</Text>}
         <Text style={styles.rowChevron}>›</Text>
@@ -56,23 +73,45 @@ function FolderRow({
           notes={notes}
           depth={depth + 1}
           onOpenFolder={onOpenFolder}
+          onRenameFolder={onRenameFolder}
+          onDeleteFolder={onDeleteFolder}
         />
       ))}
     </>
   );
 }
 
-export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }: Props) {
+export default function FoldersScreen({
+  tree,
+  notes,
+  onOpenFolder,
+  onAddFolder,
+  onRenameFolder,
+  onDeleteFolder,
+}: Props) {
   const [modalVisible, setModalVisible] = useState(false);
   const [nameInput, setNameInput] = useState('');
+  const [editingFolder, setEditingFolder] = useState<{ id: string; name: string } | null>(null);
 
   const submitFolder = () => {
     const trimmed = nameInput.trim();
-    if (trimmed) {
+    if (!trimmed) return;
+
+    if (editingFolder) {
+      onRenameFolder(editingFolder.id, trimmed);
+    } else {
       onAddFolder(trimmed);
     }
+
     setNameInput('');
+    setEditingFolder(null);
     setModalVisible(false);
+  };
+
+  const openRenameModal = (folderId: string, name: string) => {
+    setEditingFolder({ id: folderId, name });
+    setNameInput(name);
+    setModalVisible(true);
   };
 
   return (
@@ -82,11 +121,15 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
       {tree.children.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.empty}>
-            No notes yet. They&apos;ll appear here as you record notes, or you can create a category now.
+            No notes yet. They'll appear here as you record notes, or you can create a category now.
           </Text>
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() => setModalVisible(true)}
+            onPress={() => {
+              setEditingFolder(null);
+              setNameInput('');
+              setModalVisible(true);
+            }}
             activeOpacity={0.8}
           >
             <Text style={styles.primaryBtnText}>Create category</Text>
@@ -97,7 +140,11 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
           <View style={styles.hero}>
             <TouchableOpacity
               style={styles.primaryBtn}
-              onPress={() => setModalVisible(true)}
+              onPress={() => {
+                setEditingFolder(null);
+                setNameInput('');
+                setModalVisible(true);
+              }}
               activeOpacity={0.8}
             >
               <Text style={styles.primaryBtnText}>New category</Text>
@@ -112,6 +159,8 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
                 notes={notes}
                 depth={0}
                 onOpenFolder={onOpenFolder}
+                onRenameFolder={openRenameModal}
+                onDeleteFolder={onDeleteFolder}
               />
             ))}
           </ScrollView>
@@ -120,7 +169,11 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
 
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => setModalVisible(true)}
+        onPress={() => {
+          setEditingFolder(null);
+          setNameInput('');
+          setModalVisible(true);
+        }}
         activeOpacity={0.8}
       >
         <Text style={styles.fabIcon}>+</Text>
@@ -129,7 +182,9 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
       <Modal visible={modalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>New category</Text>
+            <Text style={styles.modalTitle}>
+              {editingFolder ? 'Rename category' : 'New category'}
+            </Text>
             <TextInput
               style={styles.modalInput}
               placeholder="Category name"
@@ -137,19 +192,23 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
               value={nameInput}
               onChangeText={setNameInput}
               autoFocus
+              onSubmitEditing={submitFolder}
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.modalCancel}
                 onPress={() => {
                   setNameInput('');
+                  setEditingFolder(null);
                   setModalVisible(false);
                 }}
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalCreate} onPress={submitFolder}>
-                <Text style={styles.modalCreateText}>Create</Text>
+                <Text style={styles.modalCreateText}>
+                  {editingFolder ? 'Save' : 'Create'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -204,7 +263,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.borderLight,
     gap: 8,
   },
-  rowIcon: { fontSize: 16 },
+  rowIcon: { fontSize: FONTS.size.xs, color: COLORS.brownLight, width: 38 },
   rowName: { flex: 1, fontSize: FONTS.size.sm, color: COLORS.brown },
   rowCount: { fontSize: FONTS.size.xs, color: COLORS.brownFaint },
   rowChevron: { fontSize: 20, color: COLORS.brownFaint, lineHeight: 22 },

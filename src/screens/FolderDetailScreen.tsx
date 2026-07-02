@@ -1,9 +1,11 @@
 import React from 'react';
 import {
-  View,
-  Text,
+  Alert,
   ScrollView,
   StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
 } from 'react-native';
 import TopBar from '../components/TopBar';
 import SpeakButton from '../components/SpeakButton';
@@ -15,9 +17,19 @@ interface Props {
   folder: FolderNode;
   notes: Note[];
   onBack: () => void;
+  onOpenFolder: (folder: FolderNode) => void;
+  onRenameFolder: (folderId: string, name: string) => void;
+  onDeleteFolder: (folderId: string) => void;
 }
 
-export default function FolderDetailScreen({ folder, notes, onBack }: Props) {
+export default function FolderDetailScreen({
+  folder,
+  notes,
+  onBack,
+  onOpenFolder,
+  onRenameFolder,
+  onDeleteFolder,
+}: Props) {
   const folderIds = new Set<string>();
   function collectIds(node: FolderNode) {
     folderIds.add(node.id);
@@ -27,16 +39,42 @@ export default function FolderDetailScreen({ folder, notes, onBack }: Props) {
 
   const folderNotes = notes.filter(n => folderIds.has(n.folderId));
 
+  const showActions = () => {
+    Alert.alert(folder.name, 'Choose an action', [
+      { text: 'Rename', onPress: () => onRenameFolder(folder.id, folder.name) },
+      { text: 'Delete', style: 'destructive', onPress: () => onDeleteFolder(folder.id) },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   return (
     <View style={styles.container}>
       <TopBar subtitle="Notes" title={folder.name} onBack={onBack} />
 
+      <View style={styles.headerActionRow}>
+        <TouchableOpacity style={styles.headerActionBtn} onPress={showActions} activeOpacity={0.8}>
+          <Text style={styles.headerActionText}>Rename or delete category</Text>
+        </TouchableOpacity>
+      </View>
+
       {folder.children.length > 0 && (
         <View style={styles.subfolderRow}>
           {folder.children.map(c => (
-            <View key={c.id} style={styles.subfolderChip}>
+            <TouchableOpacity
+              key={c.id}
+              style={styles.subfolderChip}
+              onPress={() => onOpenFolder(c)}
+              onLongPress={() =>
+                Alert.alert(c.name, 'Choose an action', [
+                  { text: 'Rename', onPress: () => onRenameFolder(c.id, c.name) },
+                  { text: 'Delete', style: 'destructive', onPress: () => onDeleteFolder(c.id) },
+                  { text: 'Cancel', style: 'cancel' },
+                ])
+              }
+              activeOpacity={0.8}
+            >
               <Text style={styles.subfolderText}>{c.name}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       )}
@@ -76,6 +114,22 @@ export default function FolderDetailScreen({ folder, notes, onBack }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
+  headerActionRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+  },
+  headerActionBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.cream,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  headerActionText: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brown,
+    fontWeight: '600',
+  },
   subfolderRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

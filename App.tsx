@@ -37,12 +37,17 @@ import {
 import {
   addChildFolder,
   classifyDueBucket,
+  collectFolderIds,
+  deleteFolder,
+  ensureFolder,
   extractFirstUrl,
   findFolderByName,
+  findNode,
   flattenFolders,
   formatReminderLabel,
   makeId,
   parseSuggestedReminder,
+  renameFolder,
 } from './src/utils';
 import { EMPTY_KEEPER_TREE, EMPTY_TREE, COLORS } from './src/constants';
 import type {
@@ -118,6 +123,12 @@ export default function App() {
   const [todoFocusListId, setTodoFocusListId] = useState<string | null>(null);
   const [reminderQueue, setReminderQueue] = useState<ReminderQueueItem[]>([]);
   const handledShareUrls = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!openFolder) return;
+    const refreshed = findNode(tree, openFolder.id);
+    setOpenFolder(refreshed);
+  }, [tree]);
 
   useEffect(() => {
     loadAppState().then(s => {
@@ -519,6 +530,108 @@ export default function App() {
     );
   };
 
+  const renameTodoList = (listId: string, title: string) => {
+    setTodoLists(lists =>
+      lists.map(list => (list.id === listId ? { ...list, title } : list))
+    );
+  };
+
+  const updateTodoItemText = async (listId: string, itemId: string, text: string) => {
+    const list = todoLists.find(entry => entry.id === listId);
+    const item = list?.items.find(entry => entry.id === itemId);
+    if (!list || !item) return;
+
+    let nextNotificationId = item.notificationId;
+    if (item.reminderAt) {
+      if (nextNotificationId) {
+        await cancelTodoReminder(nextNotificationId);
+      }
+      nextNotificationId = await scheduleTodoReminder(
+        'To-do reminder',
+        text,
+        item.reminderAt,
+        listId,
+        list.folderId
+      );
+    }
+
+    setTodoLists(lists =>
+      lists.map(entry =>
+        entry.id === listId
+          ? {
+              ...entry,
+              items: entry.items.map(todo =>
+                todo.id === itemId
+                  ? { ...todo, text, notificationId: nextNotificationId }
+                  : todo
+              ),
+            }
+          : entry
+      )
+    );
+  };
+
+  const deleteTodoItem = async (listId: string, itemId: string) => {
+    const item = todoLists
+      .find(list => list.id === listId)
+      ?.items.find(todo => todo.id === itemId);
+    if (item?.notificationId) {
+      await cancelTodoReminder(item.notificationId);
+    }
+    setTodoLists(lists =>
+      lists.map(list =>
+        list.id === listId
+          ? { ...list, items: list.items.filter(todo => todo.id !== itemId) }
+          : list
+      )
+    );
+  };
+
+  const renameNoteFolder = (folderId: string, name: string) => {
+    setTree(current => renameFolder(current, folderId, name));
+  };
+
+  const deleteNoteFolder = (folderId: string) => {
+    const target = findNode(tree, folderId);
+    if (!target) return;
+
+    const folderIds = collectFolderIds(target);
+    const noteCount = notes.filter(note => folderIds.has(note.folderId)).length;
+    const subfolderCount = Math.max(folderIds.size - 1, 0);
+
+    const performDelete = () => {
+      const ensured = ensureFolder(tree, 'Miscellaneous');
+      const miscId = ensured.id;
+      const nextTree = deleteFolder(ensured.tree, folderId);
+      setTree(nextTree);
+      setNotes(current =>
+        current.map(note =>
+          folderIds.has(note.folderId) ? { ...note, folderId: miscId } : note
+        )
+      );
+      if (openFolder && folderIds.has(openFolder.id)) {
+        setOpenFolder(null);
+      }
+    };
+
+    if (noteCount === 0 && subfolderCount === 0) {
+      Alert.alert('Delete folder?', 'This folder is empty.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: performDelete },
+      ]);
+      return;
+    }
+
+    Alert.alert(
+      'Delete folder?',
+      `This folder contains ${noteCount} notes and ${subfolderCount} subfolders. Deleting it will move all contents to Miscellaneous. Continue?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: performDelete },
+      ]
+    );
+  };
+
   const addManualTodoItem = (listId: string, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -685,6 +798,9 @@ export default function App() {
         folder={openFolder}
         notes={notes}
         onBack={() => setOpenFolder(null)}
+        onOpenFolder={setOpenFolder}
+        onRenameFolder={renameNoteFolder}
+        onDeleteFolder={deleteNoteFolder}
       />
     ) : (
       <FoldersScreen
@@ -695,6 +811,8 @@ export default function App() {
           const { tree: newTree } = addChildFolder(tree, 'root', name);
           setTree(newTree);
         }}
+        onRenameFolder={renameNoteFolder}
+        onDeleteFolder={deleteNoteFolder}
       />
     );
   } else if (tab === 'keeper') {
@@ -728,6 +846,9 @@ export default function App() {
         onToggle={toggleTodoItem}
         onAddItem={addManualTodoItem}
         onEditReminder={beginReminderEdit}
+        onRenameList={renameTodoList}
+        onEditItem={updateTodoItemText}
+        onDeleteItem={deleteTodoItem}
       />
     );
   } else {

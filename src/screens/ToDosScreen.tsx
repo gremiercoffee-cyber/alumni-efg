@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +11,7 @@ import {
 import TopBar from '../components/TopBar';
 import { COLORS, FONTS } from '../constants';
 import { countNotes, formatReminderLabel } from '../utils';
-import { FolderNode, TodoList } from '../types';
+import { FolderNode, TodoItem, TodoList } from '../types';
 
 interface Props {
   tree: FolderNode;
@@ -20,6 +21,9 @@ interface Props {
   onToggle: (listId: string, itemId: string) => void;
   onAddItem: (listId: string, text: string) => void;
   onEditReminder: (listId: string, itemId: string) => void;
+  onRenameList: (listId: string, title: string) => void;
+  onEditItem: (listId: string, itemId: string, text: string) => void | Promise<void>;
+  onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
 }
 
 function openItemCount(lists: TodoList[]): number {
@@ -85,12 +89,102 @@ function FolderTodoRow({
   );
 }
 
+function TodoRow({
+  item,
+  listId,
+  editing,
+  editDraft,
+  onChangeDraft,
+  onSaveEdit,
+  onCancelEdit,
+  onToggle,
+  onEditReminder,
+  onOpenActions,
+  helperText,
+}: {
+  item: TodoItem;
+  listId: string;
+  editing: boolean;
+  editDraft: string;
+  onChangeDraft: (value: string) => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  onToggle: (listId: string, itemId: string) => void;
+  onEditReminder: (listId: string, itemId: string) => void;
+  onOpenActions: () => void;
+  helperText?: string;
+}) {
+  return (
+    <TouchableOpacity
+      style={styles.itemRow}
+      onPress={() => !editing && onToggle(listId, item.id)}
+      onLongPress={onOpenActions}
+      delayLongPress={220}
+      activeOpacity={0.75}
+    >
+      <View style={[styles.checkbox, item.done && styles.checkboxDone]}>
+        {item.done && <Text style={styles.checkmark}>x</Text>}
+      </View>
+      <View style={styles.itemTextWrap}>
+        {editing ? (
+          <>
+            <View style={styles.inlineEditRow}>
+              <TextInput
+                style={styles.inlineEditInput}
+                value={editDraft}
+                onChangeText={onChangeDraft}
+                autoFocus
+                onSubmitEditing={onSaveEdit}
+                returnKeyType="done"
+              />
+              <TouchableOpacity style={styles.inlineIconBtn} onPress={onSaveEdit} activeOpacity={0.8}>
+                <Text style={styles.inlineIconText}>✓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.inlineIconBtn} onPress={onCancelEdit} activeOpacity={0.8}>
+                <Text style={styles.inlineIconText}>×</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity onPress={() => onEditReminder(listId, item.id)} activeOpacity={0.8}>
+              <Text style={styles.changeReminderText}>
+                {item.reminderAt ? 'Change reminder time' : 'Add reminder time'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.itemText, item.done && styles.itemDone]}>{item.text}</Text>
+            {(item.reminderAt || item.due) ? (
+              <TouchableOpacity
+                style={styles.reminderPill}
+                onPress={() => onEditReminder(listId, item.id)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.reminderText}>
+                  {formatReminderLabel(item.reminderAt) || item.due}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={() => onEditReminder(listId, item.id)} activeOpacity={0.8}>
+                <Text style={styles.addReminderText}>Add reminder</Text>
+              </TouchableOpacity>
+            )}
+            {helperText ? <Text style={styles.restoreText}>{helperText}</Text> : null}
+          </>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 function TodoListCard({
   list,
   focused,
   onToggle,
   onAddItem,
   onEditReminder,
+  onRenameList,
+  onEditItem,
+  onDeleteItem,
   completedExpanded,
   onToggleCompletedExpanded,
 }: {
@@ -99,13 +193,24 @@ function TodoListCard({
   onToggle: (listId: string, itemId: string) => void;
   onAddItem: (listId: string, text: string) => void;
   onEditReminder: (listId: string, itemId: string) => void;
+  onRenameList: (listId: string, title: string) => void;
+  onEditItem: (listId: string, itemId: string, text: string) => void | Promise<void>;
+  onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
   completedExpanded: boolean;
   onToggleCompletedExpanded: () => void;
 }) {
   const [draft, setDraft] = useState('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [editingListTitle, setEditingListTitle] = useState(false);
+  const [listTitleDraft, setListTitleDraft] = useState(list.title);
   const inputRef = useRef<TextInput | null>(null);
   const activeItems = list.items.filter(item => !item.done);
   const completedItems = list.items.filter(item => item.done);
+
+  useEffect(() => {
+    setListTitleDraft(list.title);
+  }, [list.title]);
 
   const submit = () => {
     const trimmed = draft.trim();
@@ -115,40 +220,98 @@ function TodoListCard({
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
+  const startItemEdit = (item: TodoItem) => {
+    setEditingItemId(item.id);
+    setEditingText(item.text);
+  };
+
+  const saveItemEdit = async () => {
+    const trimmed = editingText.trim();
+    if (!editingItemId || !trimmed) return;
+    await onEditItem(list.id, editingItemId, trimmed);
+    const editedId = editingItemId;
+    setEditingItemId(null);
+    setEditingText('');
+    Alert.alert('Change reminder?', 'Would you like to change the reminder time too?', [
+      { text: 'No', style: 'cancel' },
+      { text: 'Yes', onPress: () => onEditReminder(list.id, editedId) },
+    ]);
+  };
+
+  const openItemActions = (item: TodoItem) => {
+    Alert.alert(item.text, 'Choose an action', [
+      { text: 'Edit', onPress: () => startItemEdit(item) },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Delete this item?', item.text, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: () => onDeleteItem(list.id, item.id) },
+          ]),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const saveListTitle = () => {
+    const trimmed = listTitleDraft.trim();
+    if (!trimmed) return;
+    onRenameList(list.id, trimmed);
+    setEditingListTitle(false);
+  };
+
   return (
     <View style={[styles.list, focused && styles.listFocused]}>
-      <Text style={styles.listTitle}>{list.title}</Text>
+      {editingListTitle ? (
+        <View style={styles.inlineEditRow}>
+          <TextInput
+            style={styles.inlineEditInput}
+            value={listTitleDraft}
+            onChangeText={setListTitleDraft}
+            autoFocus
+            onSubmitEditing={saveListTitle}
+          />
+          <TouchableOpacity style={styles.inlineIconBtn} onPress={saveListTitle} activeOpacity={0.8}>
+            <Text style={styles.inlineIconText}>✓</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.inlineIconBtn}
+            onPress={() => {
+              setEditingListTitle(false);
+              setListTitleDraft(list.title);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.inlineIconText}>×</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity onLongPress={() => setEditingListTitle(true)} delayLongPress={220} activeOpacity={0.8}>
+          <Text style={styles.listTitle}>{list.title}</Text>
+        </TouchableOpacity>
+      )}
 
       {activeItems.length === 0 ? (
         <Text style={styles.emptyList}>No open items. Add one below.</Text>
       ) : (
         activeItems.map(item => (
-          <TouchableOpacity
+          <TodoRow
             key={item.id}
-            style={styles.itemRow}
-            onPress={() => onToggle(list.id, item.id)}
-            activeOpacity={0.75}
-          >
-            <View style={styles.checkbox} />
-            <View style={styles.itemTextWrap}>
-              <Text style={styles.itemText}>{item.text}</Text>
-              {(item.reminderAt || item.due) ? (
-                <TouchableOpacity
-                  style={styles.reminderPill}
-                  onPress={() => onEditReminder(list.id, item.id)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.reminderText}>
-                    {formatReminderLabel(item.reminderAt) || item.due}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity onPress={() => onEditReminder(list.id, item.id)} activeOpacity={0.8}>
-                  <Text style={styles.addReminderText}>Add reminder</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </TouchableOpacity>
+            item={item}
+            listId={list.id}
+            editing={editingItemId === item.id}
+            editDraft={editingText}
+            onChangeDraft={setEditingText}
+            onSaveEdit={saveItemEdit}
+            onCancelEdit={() => {
+              setEditingItemId(null);
+              setEditingText('');
+            }}
+            onToggle={onToggle}
+            onEditReminder={onEditReminder}
+            onOpenActions={() => openItemActions(item)}
+          />
         ))
       )}
 
@@ -181,20 +344,23 @@ function TodoListCard({
           </TouchableOpacity>
           {completedExpanded
             ? completedItems.map(item => (
-                <TouchableOpacity
+                <TodoRow
                   key={item.id}
-                  style={styles.itemRow}
-                  onPress={() => onToggle(list.id, item.id)}
-                  activeOpacity={0.75}
-                >
-                  <View style={[styles.checkbox, styles.checkboxDone]}>
-                    <Text style={styles.checkmark}>x</Text>
-                  </View>
-                  <View style={styles.itemTextWrap}>
-                    <Text style={[styles.itemText, styles.itemDone]}>{item.text}</Text>
-                    <Text style={styles.restoreText}>Tap to move back to active</Text>
-                  </View>
-                </TouchableOpacity>
+                  item={item}
+                  listId={list.id}
+                  editing={editingItemId === item.id}
+                  editDraft={editingText}
+                  onChangeDraft={setEditingText}
+                  onSaveEdit={saveItemEdit}
+                  onCancelEdit={() => {
+                    setEditingItemId(null);
+                    setEditingText('');
+                  }}
+                  onToggle={onToggle}
+                  onEditReminder={onEditReminder}
+                  onOpenActions={() => openItemActions(item)}
+                  helperText="Tap to move back to active"
+                />
               ))
             : null}
         </View>
@@ -211,6 +377,9 @@ export default function ToDosScreen({
   onToggle,
   onAddItem,
   onEditReminder,
+  onRenameList,
+  onEditItem,
+  onDeleteItem,
 }: Props) {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(focusedFolderId);
   const [expandedCompleted, setExpandedCompleted] = useState<Record<string, boolean>>({});
@@ -272,6 +441,9 @@ export default function ToDosScreen({
               onToggle={onToggle}
               onAddItem={onAddItem}
               onEditReminder={onEditReminder}
+              onRenameList={onRenameList}
+              onEditItem={onEditItem}
+              onDeleteItem={onDeleteItem}
               completedExpanded={!!expandedCompleted[list.id]}
               onToggleCompletedExpanded={() =>
                 setExpandedCompleted(current => ({
@@ -414,6 +586,11 @@ const styles = StyleSheet.create({
     color: COLORS.red,
     marginTop: 6,
   },
+  changeReminderText: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.red,
+    marginTop: 6,
+  },
   manualEntry: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -459,5 +636,34 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.xs,
     color: COLORS.brownFaint,
     marginTop: 4,
+  },
+  inlineEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inlineEditInput: {
+    flex: 1,
+    backgroundColor: COLORS.white60,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: FONTS.size.sm,
+    color: COLORS.brown,
+  },
+  inlineIconBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: COLORS.cream,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inlineIconText: {
+    fontSize: 16,
+    color: COLORS.brown,
+    fontWeight: '700',
   },
 });
