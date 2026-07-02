@@ -649,15 +649,12 @@ export default function App() {
       ts: Date.now(),
     };
 
-    let folderId = 'root';
     setTodoLists(lists =>
       lists.map(list => {
         if (list.id !== listId) return list;
-        folderId = list.folderId;
         return { ...list, items: [...list.items, item] };
       })
     );
-    enqueueReminderPrompts([item], listId, folderId);
   };
 
   const updateTodoReminder = async (target: ReminderQueueItem, reminderAt: number | null) => {
