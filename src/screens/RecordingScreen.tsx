@@ -10,12 +10,15 @@ import { COLORS, FONTS } from '../constants';
 
 interface Props {
   callMode: boolean;
+  onBeginProcessing: () => void;
+  onError: (message: string) => void;
   onComplete: (audioUri: string) => void;
 }
 
-export default function RecordingScreen({ callMode, onComplete }: Props) {
+export default function RecordingScreen({ callMode, onBeginProcessing, onError, onComplete }: Props) {
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [stopping, setStopping] = useState(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -43,19 +46,39 @@ export default function RecordingScreen({ callMode, onComplete }: Props) {
       );
       recordingRef.current = recording;
     } catch (e: any) {
+      console.error('Could not start recording', e);
       setError('Could not start recording: ' + e.message);
     }
   };
 
   const stopRecording = async () => {
+    if (stopping) return;
     if (timerRef.current) clearInterval(timerRef.current);
+    setStopping(true);
+    onBeginProcessing();
+    console.log('Stop recording tapped');
+
     try {
-      if (!recordingRef.current) return;
+      if (!recordingRef.current) {
+        throw new Error('No active recording found.');
+      }
+
+      console.log('Stopping and unloading recording');
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
-      if (uri) onComplete(uri);
+      console.log('Recording stopped', uri);
+
+      if (!uri) {
+        throw new Error('Could not access the recorded audio file.');
+      }
+
+      onComplete(uri);
     } catch (e: any) {
-      setError('Error stopping recording: ' + e.message);
+      const message = 'Error stopping recording: ' + e.message;
+      console.error('Error stopping recording', e);
+      setError(message);
+      onError(message);
+      setStopping(false);
     }
   };
 
@@ -67,7 +90,7 @@ export default function RecordingScreen({ callMode, onComplete }: Props) {
       <View style={styles.statusRow}>
         <View style={styles.dot} />
         <Text style={styles.statusText}>
-          {callMode ? 'Recording call (speaker)' : 'Recording'}
+          {stopping ? 'Preparing your note' : callMode ? 'Recording call (speaker)' : 'Recording'}
         </Text>
       </View>
 
@@ -90,13 +113,23 @@ export default function RecordingScreen({ callMode, onComplete }: Props) {
       {error ? (
         <Text style={styles.error}>{error}</Text>
       ) : (
-        <TouchableOpacity style={styles.stopBtn} onPress={stopRecording} activeOpacity={0.8}>
-          <Text style={styles.stopIcon}>◼</Text>
-        </TouchableOpacity>
+        <View style={styles.actionArea}>
+          {stopping && <View style={styles.spinner} />}
+          <TouchableOpacity
+            style={[styles.stopBtn, stopping && styles.stopBtnDisabled]}
+            onPress={stopRecording}
+            activeOpacity={0.8}
+            disabled={stopping}
+          >
+            <Text style={styles.stopIcon}>{stopping ? '...' : '■'}</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       <Text style={styles.hint}>
-        {callMode
+        {stopping
+          ? 'One moment while the recording is saved.'
+          : callMode
           ? 'Listening through the speaker · tap to stop'
           : 'Tap to stop · keeps recording if you switch apps'}
       </Text>
@@ -110,7 +143,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 24,
+    gap: 26,
     paddingHorizontal: 32,
   },
   statusRow: {
@@ -125,13 +158,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.red,
   },
   statusText: {
-    fontSize: FONTS.size.md,
+    fontSize: FONTS.size.sm,
     color: COLORS.red,
     letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   timer: {
-    fontSize: 52,
-    fontWeight: '300',
+    fontSize: 64,
+    fontWeight: '400',
     color: COLORS.brown,
     fontVariant: ['tabular-nums'],
   },
@@ -146,10 +180,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#c9b98f',
     borderRadius: 3,
   },
+  actionArea: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 160,
+  },
+  spinner: {
+    position: 'absolute',
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    borderTopColor: COLORS.brown,
+  },
   stopBtn: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 124,
+    height: 124,
+    borderRadius: 62,
     backgroundColor: COLORS.red,
     alignItems: 'center',
     justifyContent: 'center',
@@ -159,14 +207,18 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 5,
   },
+  stopBtnDisabled: {
+    opacity: 0.9,
+  },
   stopIcon: {
-    fontSize: 26,
+    fontSize: 32,
     color: '#fff',
   },
   hint: {
-    fontSize: FONTS.size.xs,
+    fontSize: FONTS.size.sm,
     color: COLORS.brownFaint,
     textAlign: 'center',
+    maxWidth: 260,
   },
   error: {
     fontSize: FONTS.size.sm,

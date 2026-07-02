@@ -25,19 +25,18 @@ export function findNode(node: FolderNode, id: string): FolderNode | null {
 export function addChildFolder(
   tree: FolderNode,
   parentId: string,
-  name: string
+  name: string,
+  prefix = 'f'
 ): { tree: FolderNode; id: string } {
   const newTree: FolderNode = JSON.parse(JSON.stringify(tree));
-  const parent = findNode(newTree, parentId);
+  const parent = findNode(newTree, parentId) || newTree;
   const id =
-    'f-' +
+    prefix + '-' +
     name.toLowerCase().replace(/[^a-z0-9]+/g, '-') +
     '-' +
     Math.random().toString(36).slice(2, 6);
-  if (parent) {
-    parent.children = parent.children || [];
-    parent.children.push({ id, name, children: [] });
-  }
+  parent.children = parent.children || [];
+  parent.children.push({ id, name, children: [] });
   return { tree: newTree, id };
 }
 
@@ -70,4 +69,13 @@ export function folderPathLabel(
   if (!f) return 'Miscellaneous';
   const trail = f.path.slice(1); // drop "Everything"
   return trail.length ? trail.join(' / ') : f.name;
+}
+
+export function makeId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function extractFirstUrl(text: string): string | null {
+  const match = text.match(/https?:\/\/[^\s<>"']+/i);
+  return match ? match[0].replace(/[),.;!?]+$/, '') : null;
 }

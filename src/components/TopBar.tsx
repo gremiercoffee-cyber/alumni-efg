@@ -31,20 +31,21 @@ export default function TopBar({ title, subtitle, onBack }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    paddingTop: 14,
+    paddingBottom: 18,
     backgroundColor: COLORS.bg,
+    justifyContent: 'center',
   },
   backBtn: {
-    marginRight: 8,
-    marginLeft: -6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    position: 'absolute',
+    left: 18,
+    top: 18,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   backIcon: {
     fontSize: 28,
@@ -52,17 +53,21 @@ const styles = StyleSheet.create({
     lineHeight: 32,
   },
   text: {
-    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 64,
   },
   subtitle: {
     fontSize: FONTS.size.xs,
     color: COLORS.brownLight,
     letterSpacing: 1.4,
-    marginBottom: 1,
+    marginBottom: 6,
+    textAlign: 'center',
   },
   title: {
-    fontSize: FONTS.size.lg,
-    fontWeight: '600',
+    fontSize: 30,
+    fontWeight: '700',
     color: COLORS.brown,
+    textAlign: 'center',
   },
 });

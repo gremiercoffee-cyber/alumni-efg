@@ -2,7 +2,7 @@ import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { COLORS } from '../constants';
 
-type Tab = 'home' | 'folders' | 'actions' | 'settings';
+type Tab = 'home' | 'folders' | 'keeper' | 'actions' | 'todos' | 'settings';
 
 interface Props {
   active: Tab;
@@ -10,10 +10,12 @@ interface Props {
 }
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'home', label: 'Home', icon: '⌂' },
-  { id: 'folders', label: 'Folders', icon: '▤' },
-  { id: 'actions', label: 'Actions', icon: '✓' },
-  { id: 'settings', label: 'Settings', icon: '⚙' },
+  { id: 'home', label: 'Home', icon: 'H' },
+  { id: 'folders', label: 'Folders', icon: 'F' },
+  { id: 'keeper', label: 'Keeper', icon: 'K' },
+  { id: 'actions', label: 'Actions', icon: 'A' },
+  { id: 'todos', label: 'To-Dos', icon: 'T' },
+  { id: 'settings', label: 'Settings', icon: 'S' },
 ];
 
 export default function TabBar({ active, onChange }: Props) {
@@ -29,7 +31,7 @@ export default function TabBar({ active, onChange }: Props) {
           <Text style={[styles.icon, active === t.id && styles.iconActive]}>
             {t.icon}
           </Text>
-          <Text style={[styles.label, active === t.id && styles.labelActive]}>
+          <Text style={[styles.label, active === t.id && styles.labelActive]} numberOfLines={1}>
             {t.label}
           </Text>
         </TouchableOpacity>
@@ -51,16 +53,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 8,
     gap: 2,
+    minWidth: 0,
   },
   icon: {
-    fontSize: 18,
+    fontSize: 14,
     color: COLORS.brownFaint,
+    fontWeight: '700',
   },
   iconActive: {
     color: COLORS.brown,
   },
   label: {
-    fontSize: 10,
+    fontSize: 9,
     color: COLORS.brownFaint,
   },
   labelActive: {

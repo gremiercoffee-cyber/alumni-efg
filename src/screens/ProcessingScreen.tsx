@@ -13,7 +13,7 @@ export default function ProcessingScreen() {
         useNativeDriver: true,
       })
     ).start();
-  }, []);
+  }, [spin]);
 
   const rotate = spin.interpolate({
     inputRange: [0, 1],
@@ -23,7 +23,8 @@ export default function ProcessingScreen() {
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.spinner, { transform: [{ rotate }] }]} />
-      <Text style={styles.label}>Organizing your note…</Text>
+      <Text style={styles.title}>Processing</Text>
+      <Text style={styles.label}>Organizing your note...</Text>
     </View>
   );
 }
@@ -35,17 +36,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,
+    paddingHorizontal: 24,
   },
   spinner: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 3,
     borderColor: '#d8c9a3',
     borderTopColor: COLORS.brown,
   },
+  title: {
+    fontSize: 30,
+    fontWeight: '700',
+    color: COLORS.brown,
+  },
   label: {
-    fontSize: FONTS.size.md,
+    fontSize: FONTS.size.sm,
     color: COLORS.brownMid,
+    textAlign: 'center',
   },
 });

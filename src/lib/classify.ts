@@ -1,59 +1,68 @@
-import { FlatFolder, AppSettings, PendingNote } from '../types';
+import {
+  FlatFolder,
+  AppSettings,
+  PendingCapture,
+  FolderNode,
+  TodoList,
+} from '../types';
+import { flattenFolders } from '../utils';
 
 interface ClassifyInput {
   transcript: string;
   folderList: FlatFolder[];
+  todoLists: TodoList[];
   settings: AppSettings;
   openaiKey: string;
 }
 
-export async function classifyNote({
-  transcript,
-  folderList,
-  settings,
-  openaiKey,
-}: ClassifyInput): Promise<Omit<PendingNote, 'id' | 'transcript'>> {
-  const folderDesc = folderList.length
-    ? folderList.map(f => `- id: ${f.id} | path: ${f.path.join(' > ')}`).join('\n')
-    : '(no folders exist yet — this may be the first note)';
+interface ClassifyLinkInput {
+  sharedText: string;
+  url: string;
+  keeperTree: FolderNode;
+  openaiKey: string;
+}
 
-  const contextBlock = [
+export interface LinkClassification {
+  title: string;
+  summary: string;
+  existingCategoryId: string | null;
+  newCategorySuggestion: { parentId: string; name: string } | null;
+}
+
+function settingsContext(settings: AppSettings): string {
+  return [
     settings.areas && `Life areas: ${settings.areas}`,
     settings.schedule && `Daily schedule: ${settings.schedule}`,
-    settings.coffee && `Coffee business: ${settings.coffee}`,
-    settings.coffeePeople && `Coffee people: ${settings.coffeePeople}`,
-    settings.yeshiva && `Yeshiva: ${settings.yeshiva}`,
-    settings.yeshivaPeople && `Yeshiva people: ${settings.yeshivaPeople}`,
+    settings.coffee && `Work and responsibilities: ${settings.coffee}`,
+    settings.coffeePeople && `People they interact with: ${settings.coffeePeople}`,
+    settings.yeshiva && `Recurring commitments: ${settings.yeshiva}`,
+    settings.yeshivaPeople && `Important relationships: ${settings.yeshivaPeople}`,
     settings.urgency && `Urgency rules: ${settings.urgency}`,
     settings.vocabulary && `Vocabulary: ${settings.vocabulary}`,
     settings.privacy && `Privacy: ${settings.privacy}`,
   ].filter(Boolean).join('\n');
-
-  const system = `You are a note-organizing assistant for a specific person. Read a voice transcript, file it into the right folder, extract implicit action items, and suggest realistic reminder times.
-
-${contextBlock ? `Context about this person:\n${contextBlock}\n` : ''}
-Existing folders:
-${folderDesc}
-
-Respond ONLY with raw JSON — no markdown fences, no preamble — exactly this shape:
-{
-  "title": "3-6 word title",
-  "summary": "1-2 sentence summary",
-  "existingFolderId": "id of best matching existing folder, or null",
-  "newFolderSuggestion": { "parentId": "id of closest parent (use root if none fit)", "name": "new folder name" } or null,
-  "actionItems": [
-    { "text": "short action starting with a verb", "due": "natural language due date/time like 'Today, 5:00 PM' or 'Fri Jul 4' or null", "inferred": true }
-  ]
 }
 
-Rules:
-- Infer action items from the content — don't wait for the person to say "action item". If the conversation implies something needs to happen, flag it.
-- For due dates: use the urgency rules above if provided. If something sounds pressing, suggest today or tomorrow. If no urgency is implied, leave due as null.
-- If an existing folder fits well, set existingFolderId and leave newFolderSuggestion null.
-- If nothing fits (including when no folders exist yet), propose a new folder — top-level if this is a genuinely new life area, or nested under the closest existing parent otherwise. Leave existingFolderId null.
-- actionItems can be an empty array if there are genuinely none.
-- Output strictly valid JSON only.`;
+function folderContext(folderList: FlatFolder[], emptyLabel: string): string {
+  return folderList.length
+    ? folderList.map(f => `- id: ${f.id} | path: ${f.path.join(' > ')}`).join('\n')
+    : emptyLabel;
+}
 
+function todoContext(todoLists: TodoList[], folderList: FlatFolder[]): string {
+  if (!todoLists.length) return '(no running to-do lists exist yet)';
+
+  return todoLists.map(list => {
+    const folder = folderList.find(f => f.id === list.folderId);
+    const openItems = list.items.filter(i => !i.done).map(i => `    - ${i.text}`).join('\n');
+    return [
+      `- id: ${list.id} | title: ${list.title} | folder: ${folder ? folder.path.join(' > ') : list.folderId}`,
+      openItems || '    - no open items',
+    ].join('\n');
+  }).join('\n');
+}
+
+async function askOpenAI(openaiKey: string, system: string, user: string): Promise<any> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -65,7 +74,7 @@ Rules:
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: `Transcript:\n"""\n${transcript}\n"""` },
+        { role: 'user', content: user },
       ],
     }),
   });
@@ -82,6 +91,112 @@ Rules:
   try {
     return JSON.parse(cleaned);
   } catch (e) {
-    throw new Error('AI returned invalid JSON — try again.');
+    throw new Error('AI returned invalid JSON - try again.');
   }
+}
+
+export async function classifyNote({
+  transcript,
+  folderList,
+  todoLists,
+  settings,
+  openaiKey,
+}: ClassifyInput): Promise<Omit<PendingCapture, 'id' | 'transcript'>> {
+  const folderDesc = folderContext(
+    folderList,
+    '(no folders exist yet - this may be the first capture)'
+  );
+  const todosDesc = todoContext(todoLists, folderList);
+  const contextBlock = settingsContext(settings);
+
+  const system = `You organize spoken captures for one person. Decide whether the transcript is a general note or an explicit running to-do list.
+
+${contextBlock ? `Context about this person:\n${contextBlock}\n` : ''}
+Existing note/to-do folders:
+${folderDesc}
+
+Existing running to-do lists:
+${todosDesc}
+
+Respond ONLY with raw JSON, no markdown fences, no preamble.
+
+For a normal note, use exactly this shape:
+{
+  "contentType": "note",
+  "title": "3-6 word title",
+  "summary": "1-2 sentence summary",
+  "existingFolderId": "id of best matching existing folder, or null",
+  "newFolderSuggestion": { "parentId": "id of closest parent (use root if none fit)", "name": "new folder name" } or null,
+  "actionItems": [
+    { "text": "short action starting with a verb", "due": "natural language due date/time like 'Today, 5:00 PM' or 'Fri Jul 4' or null", "inferred": true }
+  ]
+}
+
+For an explicit to-do dump, use exactly this shape:
+{
+  "contentType": "todo_items",
+  "title": "3-6 word title for this task batch",
+  "summary": "1 sentence summary",
+  "existingFolderId": "id of best matching folder, or null",
+  "newFolderSuggestion": { "parentId": "id of closest parent (use root if none fit)", "name": "new folder name" } or null,
+  "existingTodoListId": "id of best matching running to-do list, or null",
+  "newTodoListTitle": "short list title if no existing list fits, otherwise null",
+  "todoItems": [
+    { "text": "one concrete task starting with a verb", "due": "natural language due date/time or null" }
+  ]
+}
+
+Rules:
+- Use contentType "todo_items" only when the person is clearly rattling off tasks they need to do. Meeting recaps, thoughts, ideas, and summaries are notes even if they imply follow-up actions.
+- For notes, infer action items when the content implies something needs to happen.
+- For to-do items, split the transcript into discrete checklist items and do not also return actionItems.
+- For due dates, use urgency rules when provided. If no urgency is implied, leave due as null.
+- Prefer an existing folder when it fits. If none fits, propose a new folder under the closest parent.
+- For to-do items, prefer an existing running to-do list when it fits. Otherwise provide newTodoListTitle.
+- Output strictly valid JSON only.`;
+
+  return askOpenAI(
+    openaiKey,
+    system,
+    `Transcript:\n"""\n${transcript}\n"""`
+  );
+}
+
+export async function classifyLink({
+  sharedText,
+  url,
+  keeperTree,
+  openaiKey,
+}: ClassifyLinkInput): Promise<LinkClassification> {
+  const keeperFolders = flattenFolders(keeperTree);
+  const categoryDesc = folderContext(
+    keeperFolders,
+    '(no Keeper categories exist yet - create the first useful category)'
+  );
+
+  const system = `You organize saved links for a personal read/watch/save-later app area called Keeper.
+
+Existing Keeper categories:
+${categoryDesc}
+
+Respond ONLY with raw JSON, no markdown fences, no preamble, exactly this shape:
+{
+  "title": "short human-readable title for the link",
+  "summary": "one short preview sentence based on the URL and shared text",
+  "existingCategoryId": "id of best matching Keeper category, or null",
+  "newCategorySuggestion": { "parentId": "id of closest parent (use keeper-root if none fit)", "name": "new category name" } or null
+}
+
+Rules:
+- Keeper categories are independent from note folders.
+- Use practical categories for saved links, such as recipes, gift ideas, articles to read, places, videos, shopping, reference, or anything more specific that fits.
+- Prefer an existing Keeper category if it fits well.
+- If no category fits, suggest a concise new category.
+- Output strictly valid JSON only.`;
+
+  return askOpenAI(
+    openaiKey,
+    system,
+    `Shared text:\n"""\n${sharedText}\n"""\n\nURL:\n${url}`
+  );
 }

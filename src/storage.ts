@@ -1,11 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FolderNode, Note, AppSettings } from './types';
+import { FolderNode, Note, AppSettings, SavedLink, TodoList } from './types';
 
-const KEY = 'notekeeper:state:v1';
+const KEY = 'notekeeper:state:v2';
 
 interface AppState {
   tree?: FolderNode;
+  keeperTree?: FolderNode;
   notes?: Note[];
+  savedLinks?: SavedLink[];
+  todoLists?: TodoList[];
   settings?: Partial<AppSettings>;
 }
 

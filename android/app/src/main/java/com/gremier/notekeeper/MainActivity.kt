@@ -1,5 +1,7 @@
 package com.gremier.notekeeper
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 
@@ -16,7 +18,25 @@ class MainActivity : ReactActivity() {
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
+    normalizeSharedTextIntent(intent)
     super.onCreate(null)
+  }
+
+  override fun onNewIntent(intent: Intent?) {
+    normalizeSharedTextIntent(intent)
+    super.onNewIntent(intent)
+    if (intent != null) setIntent(intent)
+  }
+
+  private fun normalizeSharedTextIntent(source: Intent?) {
+    if (source?.action != Intent.ACTION_SEND) return
+    if (source.type?.startsWith("text/") != true) return
+
+    val sharedText = source.getStringExtra(Intent.EXTRA_TEXT)
+    if (sharedText.isNullOrBlank()) return
+
+    source.action = Intent.ACTION_VIEW
+    source.data = Uri.parse("com.gremier.notekeeper://share?text=${Uri.encode(sharedText)}")
   }
 
   /**

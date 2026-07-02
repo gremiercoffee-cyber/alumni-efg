@@ -28,8 +28,14 @@ export const FONTS = {
   },
 };
 
-export const SEED_TREE: FolderNode = {
+export const EMPTY_TREE: FolderNode = {
   id: 'root',
   name: 'Everything',
+  children: [],
+};
+
+export const EMPTY_KEEPER_TREE: FolderNode = {
+  id: 'keeper-root',
+  name: 'Keeper',
   children: [],
 };

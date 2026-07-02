@@ -33,14 +33,53 @@ export interface PendingActionItem {
   inferred: boolean;
 }
 
-export interface PendingNote {
+export interface BasePendingCapture {
   id: string;
+  contentType: 'note' | 'todo_items';
   title: string;
   summary: string;
   transcript: string;
   existingFolderId: string | null;
   newFolderSuggestion: { parentId: string; name: string } | null;
+}
+
+export interface PendingNote extends BasePendingCapture {
+  contentType: 'note';
   actionItems: PendingActionItem[];
+}
+
+export interface PendingTodoCapture extends BasePendingCapture {
+  contentType: 'todo_items';
+  existingTodoListId: string | null;
+  newTodoListTitle: string | null;
+  todoItems: { text: string; due: string | null }[];
+}
+
+export type PendingCapture = PendingNote | PendingTodoCapture;
+
+export interface SavedLink {
+  id: string;
+  url: string;
+  title: string;
+  summary: string;
+  categoryId: string;
+  ts: number;
+}
+
+export interface TodoItem {
+  id: string;
+  text: string;
+  due: string | null;
+  done: boolean;
+  ts: number;
+}
+
+export interface TodoList {
+  id: string;
+  title: string;
+  folderId: string;
+  items: TodoItem[];
+  ts: number;
 }
 
 export interface AppSettings {

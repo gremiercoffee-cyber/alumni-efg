@@ -61,6 +61,10 @@ export default function ActionsScreen({ notes, tree, onToggle }: Props) {
         title="Action items"
       />
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.hero}>
+          <Text style={styles.heroCount}>{pending}</Text>
+          <Text style={styles.heroLabel}>{pending === 1 ? 'Open item' : 'Open items'}</Text>
+        </View>
         {allActions.length === 0 ? (
           <Text style={styles.empty}>
             No action items yet. They appear here automatically after you record a note.
@@ -112,11 +116,29 @@ export default function ActionsScreen({ notes, tree, onToggle }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   content: { padding: 12, paddingBottom: 24 },
+  hero: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 6,
+    paddingBottom: 18,
+  },
+  heroCount: {
+    fontSize: 54,
+    fontWeight: '700',
+    color: COLORS.brown,
+    lineHeight: 58,
+  },
+  heroLabel: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brownLight,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
   empty: {
-    fontSize: FONTS.size.md,
+    fontSize: FONTS.size.sm,
     color: COLORS.brownFaint,
     textAlign: 'center',
-    marginTop: 48,
+    marginTop: 28,
     paddingHorizontal: 32,
     lineHeight: 22,
   },
@@ -161,7 +183,7 @@ const styles = StyleSheet.create({
   },
   checkmark: { fontSize: 11, color: '#fff' },
   actionTextCol: { flex: 1 },
-  actionText: { fontSize: FONTS.size.md, color: COLORS.brown },
+  actionText: { fontSize: FONTS.size.sm, color: COLORS.brown },
   actionDone: { textDecorationLine: 'line-through', color: COLORS.brownFaint },
   actionMeta: {
     fontSize: FONTS.size.xs,

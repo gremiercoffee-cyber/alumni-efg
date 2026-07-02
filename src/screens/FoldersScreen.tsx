@@ -79,23 +79,44 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
     <View style={styles.container}>
       <TopBar subtitle="Browse" title="Folders" />
 
-      {tree.children.length === 0 && (
-        <Text style={styles.empty}>
-          No folders yet — they'll appear here as you record notes, or tap + below to add one yourself.
-        </Text>
-      )}
+      {tree.children.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.empty}>
+            No folders yet. They&apos;ll appear here as you record notes, or you can create one now.
+          </Text>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => setModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.primaryBtnText}>Create folder</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          <View style={styles.hero}>
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => setModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.primaryBtnText}>New folder</Text>
+            </TouchableOpacity>
+          </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {tree.children.map(folder => (
-          <FolderRow
-            key={folder.id}
-            folder={folder}
-            notes={notes}
-            depth={0}
-            onOpenFolder={onOpenFolder}
-          />
-        ))}
-      </ScrollView>
+          <ScrollView contentContainerStyle={styles.content}>
+            {tree.children.map(folder => (
+              <FolderRow
+                key={folder.id}
+                folder={folder}
+                notes={notes}
+                depth={0}
+                onOpenFolder={onOpenFolder}
+              />
+            ))}
+          </ScrollView>
+        </>
+      )}
 
       <TouchableOpacity
         style={styles.fab}
@@ -120,7 +141,10 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.modalCancel}
-                onPress={() => { setNameInput(''); setModalVisible(false); }}
+                onPress={() => {
+                  setNameInput('');
+                  setModalVisible(false);
+                }}
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
@@ -137,12 +161,39 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
+  hero: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
   content: { paddingVertical: 8, paddingBottom: 90 },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    paddingBottom: 40,
+    gap: 18,
+  },
   empty: {
-    padding: 20,
-    fontSize: FONTS.size.md,
+    fontSize: FONTS.size.sm,
     color: COLORS.brownFaint,
     textAlign: 'center',
+    lineHeight: 21,
+  },
+  primaryBtn: {
+    minWidth: 170,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.brown,
+    borderRadius: 28,
+    paddingHorizontal: 28,
+    paddingVertical: 16,
+  },
+  primaryBtnText: {
+    fontSize: FONTS.size.md,
+    color: COLORS.bg,
+    fontWeight: '600',
   },
   row: {
     flexDirection: 'row',
@@ -154,7 +205,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   rowIcon: { fontSize: 16 },
-  rowName: { flex: 1, fontSize: FONTS.size.md, color: COLORS.brown },
+  rowName: { flex: 1, fontSize: FONTS.size.sm, color: COLORS.brown },
   rowCount: { fontSize: FONTS.size.xs, color: COLORS.brownFaint },
   rowChevron: { fontSize: 20, color: COLORS.brownFaint, lineHeight: 22 },
   fab: {

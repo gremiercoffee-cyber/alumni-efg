@@ -23,47 +23,47 @@ const SECTIONS: { key: keyof AppSettings; label: string; placeholder: string }[]
   {
     key: 'areas',
     label: 'Main areas of my life',
-    placeholder: 'e.g. Gremier Coffee (my business), Yeshiva (I\'m a rabbi there), and Family. Keep these as the top-level folders.',
+    placeholder: 'e.g. Work, family, health, errands, projects. These can become your top-level folders.',
   },
   {
     key: 'schedule',
     label: 'Daily schedule',
-    placeholder: 'e.g. Mornings I\'m at the production space. Afternoons are Yeshiva — shiur from 2 to 4. Evenings are deliveries or admin.',
+    placeholder: 'e.g. Mornings are focused work, afternoons are meetings, evenings are personal or family time.',
   },
   {
     key: 'coffee',
-    label: 'Coffee business — what I do',
-    placeholder: 'e.g. I handle production, bottling, store deliveries, and the admin panel myself.',
+    label: 'Work and responsibilities',
+    placeholder: 'e.g. I manage planning, communication, follow-ups, logistics, and day-to-day tasks.',
   },
   {
     key: 'coffeePeople',
-    label: 'Coffee business — people I deal with',
-    placeholder: 'e.g. Names of suppliers, store contacts, delivery partners.',
+    label: 'People I interact with',
+    placeholder: 'e.g. Team members, clients, family members, service providers, collaborators.',
   },
   {
     key: 'yeshiva',
-    label: 'Yeshiva — what I do',
-    placeholder: 'e.g. I\'m a rabbi — regular check-ins with students, shiur prep.',
+    label: 'Recurring commitments',
+    placeholder: 'e.g. Regular meetings, appointments, classes, household responsibilities, or weekly routines.',
   },
   {
     key: 'yeshivaPeople',
-    label: 'Yeshiva — people I deal with',
-    placeholder: 'e.g. Names of students or colleagues you talk with regularly.',
+    label: 'Important relationships',
+    placeholder: 'e.g. People I check in with often or need to keep in mind when organizing notes.',
   },
   {
     key: 'urgency',
     label: 'How urgency works for me',
-    placeholder: 'e.g. Anything supplier or money related, treat as same-day. Student matters can usually wait a day or two.',
+    placeholder: 'e.g. Time-sensitive messages should be same-day. Routine items can wait a little longer.',
   },
   {
     key: 'vocabulary',
     label: 'Words and terms to know',
-    placeholder: 'e.g. Hebrew/Yiddish terms I use, product names, nicknames for people or places.',
+    placeholder: 'e.g. Names, abbreviations, jargon, nicknames, or phrases I use a lot.',
   },
   {
     key: 'privacy',
     label: 'What should stay private',
-    placeholder: 'e.g. Anything I say about X topic should not be filed or summarized.',
+    placeholder: 'e.g. Topics that should not be summarized, stored, or filed automatically.',
   },
 ];
 
@@ -134,7 +134,7 @@ function MicSection({
           onPress={toggleMic}
           activeOpacity={0.7}
         >
-          <Text style={styles.micIcon}>{recording ? '◼' : '🎙'}</Text>
+          <Text style={styles.micIcon}>{recording ? 'Stop' : 'Mic'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -157,10 +157,11 @@ export default function SettingsScreen({ settings, onSave }: Props) {
     <View style={styles.container}>
       <TopBar subtitle="Configure" title="Settings" />
       <ScrollView contentContainerStyle={styles.content}>
-
-        <Text style={styles.intro}>
-          Fill in these sections — tap the mic on any box and just talk. The more context you give, the better it files notes and guesses reminder times.
-        </Text>
+        <View style={styles.hero}>
+          <Text style={styles.intro}>
+            Fill in any sections that feel useful. You can tap the mic and talk naturally. The more general context you give, the better the app can organize notes and suggest reminders.
+          </Text>
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>OPENAI API KEY (for transcription + organizing)</Text>
@@ -174,7 +175,6 @@ export default function SettingsScreen({ settings, onSave }: Props) {
             secureTextEntry
           />
         </View>
-
 
         {SECTIONS.map(s => (
           <MicSection
@@ -190,7 +190,6 @@ export default function SettingsScreen({ settings, onSave }: Props) {
         <TouchableOpacity style={styles.saveBtn} onPress={save} activeOpacity={0.8}>
           <Text style={styles.saveBtnText}>Save preferences</Text>
         </TouchableOpacity>
-
       </ScrollView>
     </View>
   );
@@ -199,11 +198,17 @@ export default function SettingsScreen({ settings, onSave }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   content: { padding: 20, paddingBottom: 40 },
+  hero: {
+    alignItems: 'center',
+    paddingBottom: 18,
+  },
   intro: {
     fontSize: FONTS.size.sm,
     color: COLORS.brownLight,
     lineHeight: 19,
-    marginBottom: 20,
+    marginBottom: 4,
+    textAlign: 'center',
+    maxWidth: 320,
   },
   section: { marginBottom: 18 },
   sectionLabel: {
@@ -242,13 +247,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   micBtnActive: { backgroundColor: COLORS.red },
-  micIcon: { fontSize: 16 },
+  micIcon: { fontSize: 11, color: COLORS.brown },
   saveBtn: {
-    marginTop: 8,
+    marginTop: 18,
     backgroundColor: COLORS.brown,
+    minHeight: 56,
     paddingVertical: 14,
     borderRadius: 30,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   saveBtnText: {
     fontSize: FONTS.size.md,

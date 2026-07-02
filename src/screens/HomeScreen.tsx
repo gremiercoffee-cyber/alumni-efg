@@ -33,13 +33,20 @@ export default function HomeScreen({
 
   return (
     <View style={styles.container}>
-      <TopBar subtitle={new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} title="NoteKeeper" />
+      <TopBar
+        subtitle={new Date().toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+        })}
+        title="NoteKeeper"
+      />
 
       {showToast && onToastTap && (
         <TouchableOpacity style={styles.toast} onPress={onToastTap} activeOpacity={0.85}>
           <Text style={styles.toastIcon}>🎙</Text>
           <View style={styles.toastText}>
-            <Text style={styles.toastTitle}>Note ready — tap to review</Text>
+            <Text style={styles.toastTitle}>Note ready - tap to review</Text>
             <Text style={styles.toastSub}>Action items found · confirm placement</Text>
           </View>
         </TouchableOpacity>
@@ -61,7 +68,7 @@ export default function HomeScreen({
         <Text style={styles.micLabel}>Tap to start recording</Text>
 
         <TouchableOpacity style={styles.callBtn} onPress={onCallRecordTap} activeOpacity={0.7}>
-          <Text style={styles.callBtnText}>📞  On a call right now</Text>
+          <Text style={styles.callBtnText}>On a call right now</Text>
         </TouchableOpacity>
       </View>
 
@@ -109,22 +116,25 @@ const styles = StyleSheet.create({
   },
   errorText: { fontSize: FONTS.size.sm, color: '#7a3a22' },
   hero: {
+    flex: 1,
     alignItems: 'center',
-    paddingTop: 28,
-    paddingBottom: 20,
-    gap: 10,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 24,
+    gap: 14,
   },
   tagline: {
-    fontSize: FONTS.size.base,
+    fontSize: FONTS.size.sm,
     color: COLORS.brownMid,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 8,
+    lineHeight: 20,
+    marginBottom: 10,
   },
   micBtn: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 152,
+    height: 152,
+    borderRadius: 76,
     backgroundColor: COLORS.brown,
     alignItems: 'center',
     justifyContent: 'center',
@@ -134,24 +144,29 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 5,
   },
-  micIcon: { fontSize: 36 },
-  micLabel: { fontSize: FONTS.size.sm, color: COLORS.brownFaint },
+  micIcon: { fontSize: 54 },
+  micLabel: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brownFaint,
+    letterSpacing: 0.3,
+  },
   callBtn: {
-    marginTop: 4,
+    marginTop: 2,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  callBtnText: { fontSize: FONTS.size.sm, color: COLORS.brownMid },
-  recentScroll: { flex: 1 },
+  callBtnText: { fontSize: FONTS.size.xs, color: COLORS.brownLight },
+  recentScroll: { flex: 0.95 },
   recentContent: { paddingHorizontal: 20, paddingBottom: 16 },
   sectionLabel: {
     fontSize: FONTS.size.xs,
     color: COLORS.brownLight,
     letterSpacing: 1.4,
     marginBottom: 8,
+    textAlign: 'center',
   },
   noteCard: {
     flexDirection: 'row',
@@ -165,7 +180,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   noteCardText: { flex: 1 },
-  noteTitle: { fontSize: FONTS.size.md, fontWeight: '600', color: COLORS.brown },
+  noteTitle: { fontSize: FONTS.size.sm, fontWeight: '600', color: COLORS.brown },
   noteSummary: { fontSize: FONTS.size.xs, color: COLORS.brownLight, marginTop: 2 },
   noteDate: { fontSize: FONTS.size.xs, color: COLORS.brownFaint, marginTop: 4 },
 });

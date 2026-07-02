@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Platform,
   StatusBar,
+  Linking,
 } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import RecordingScreen from './src/screens/RecordingScreen';
@@ -14,24 +15,42 @@ import ReviewScreen from './src/screens/ReviewScreen';
 import FoldersScreen from './src/screens/FoldersScreen';
 import FolderDetailScreen from './src/screens/FolderDetailScreen';
 import ActionsScreen from './src/screens/ActionsScreen';
+import KeeperScreen from './src/screens/KeeperScreen';
+import ToDosScreen from './src/screens/ToDosScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import TabBar from './src/components/TabBar';
 import { loadAppState, saveAppState } from './src/storage';
-import { classifyNote } from './src/lib/classify';
+import { classifyLink, classifyNote } from './src/lib/classify';
 import { transcribeAudio } from './src/lib/transcribe';
-import { addChildFolder, flattenFolders } from './src/utils';
-import { SEED_TREE, COLORS } from './src/constants';
-import type { FolderNode, Note, PendingNote, AppSettings } from './src/types';
+import { addChildFolder, extractFirstUrl, flattenFolders, makeId } from './src/utils';
+import { EMPTY_KEEPER_TREE, EMPTY_TREE, COLORS } from './src/constants';
+import type {
+  FolderNode,
+  Note,
+  PendingCapture,
+  AppSettings,
+  SavedLink,
+  TodoList,
+  TodoItem,
+} from './src/types';
 
-export type Tab = 'home' | 'folders' | 'actions' | 'settings';
+export type Tab = 'home' | 'folders' | 'keeper' | 'actions' | 'todos' | 'settings';
 export type Flow = 'idle' | 'callPrompt' | 'recording' | 'processing' | 'toast' | 'review';
+
+function sharedTextFromUrl(url: string): string | null {
+  const match = url.match(/[?&]text=([^&]+)/);
+  return match ? decodeURIComponent(match[1].replace(/\+/g, '%20')) : null;
+}
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [flow, setFlow] = useState<Flow>('idle');
   const [callMode, setCallMode] = useState(false);
-  const [tree, setTree] = useState<FolderNode>(SEED_TREE);
+  const [tree, setTree] = useState<FolderNode>(EMPTY_TREE);
+  const [keeperTree, setKeeperTree] = useState<FolderNode>(EMPTY_KEEPER_TREE);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [savedLinks, setSavedLinks] = useState<SavedLink[]>([]);
+  const [todoLists, setTodoLists] = useState<TodoList[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     openaiKey: '',
     anthropicKey: '',
@@ -45,30 +64,105 @@ export default function App() {
     vocabulary: '',
     privacy: '',
   });
-  const [pending, setPending] = useState<PendingNote | null>(null);
+  const [pending, setPending] = useState<PendingCapture | null>(null);
   const [openFolder, setOpenFolder] = useState<FolderNode | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keeperProcessing, setKeeperProcessing] = useState(false);
+  const handledShareUrls = useRef<Set<string>>(new Set());
 
-  // Load persisted state on start
   useEffect(() => {
     loadAppState().then(s => {
       if (s) {
         if (s.tree) setTree(s.tree);
+        if (s.keeperTree) setKeeperTree(s.keeperTree);
         if (s.notes) setNotes(s.notes);
+        if (s.savedLinks) setSavedLinks(s.savedLinks);
+        if (s.todoLists) setTodoLists(s.todoLists);
         if (s.settings) setSettings(prev => ({ ...prev, ...s.settings }));
       }
       setLoaded(true);
     });
   }, []);
 
-  // Persist whenever state changes
   useEffect(() => {
     if (!loaded) return;
-    saveAppState({ tree, notes, settings });
-  }, [tree, notes, settings, loaded]);
+    saveAppState({ tree, keeperTree, notes, savedLinks, todoLists, settings });
+  }, [tree, keeperTree, notes, savedLinks, todoLists, settings, loaded]);
 
-  // ---- recording flow ----
+  const handleSharedText = async (sharedText: string) => {
+    const url = extractFirstUrl(sharedText);
+    setFlow('idle');
+    setTab('keeper');
+    setError(null);
+
+    if (!url) {
+      setError('Shared text did not include a link.');
+      return;
+    }
+
+    if (!settings.openaiKey) {
+      setError('No OpenAI key - add it in Settings first.');
+      return;
+    }
+
+    setKeeperProcessing(true);
+    try {
+      const classification = await classifyLink({
+        sharedText,
+        url,
+        keeperTree,
+        openaiKey: settings.openaiKey,
+      });
+
+      let nextKeeperTree = keeperTree;
+      let categoryId = classification.existingCategoryId;
+      if (!categoryId && classification.newCategorySuggestion) {
+        const added = addChildFolder(
+          keeperTree,
+          classification.newCategorySuggestion.parentId || 'keeper-root',
+          classification.newCategorySuggestion.name,
+          'k'
+        );
+        nextKeeperTree = added.tree;
+        categoryId = added.id;
+      }
+
+      const link: SavedLink = {
+        id: makeId('link'),
+        url,
+        title: classification.title || url,
+        summary: classification.summary || sharedText,
+        categoryId: categoryId || 'keeper-root',
+        ts: Date.now(),
+      };
+
+      setKeeperTree(nextKeeperTree);
+      setSavedLinks(items => [link, ...items]);
+    } catch (e: any) {
+      console.error('Shared link processing failed', e);
+      setError(e.message || 'Could not save shared link.');
+    } finally {
+      setKeeperProcessing(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleUrl = ({ url }: { url: string }) => {
+      if (handledShareUrls.current.has(url)) return;
+      handledShareUrls.current.add(url);
+      const sharedText = sharedTextFromUrl(url);
+      if (sharedText) handleSharedText(sharedText);
+    };
+
+    Linking.getInitialURL().then(url => {
+      if (url) handleUrl({ url });
+    });
+
+    const subscription = Linking.addEventListener('url', handleUrl);
+    return () => subscription.remove();
+  }, [keeperTree, settings.openaiKey]);
+
   const startRecording = () => {
     setCallMode(false);
     setError(null);
@@ -87,45 +181,99 @@ export default function App() {
 
   const cancelCallPrompt = () => setFlow('idle');
 
-  const handleRecordingComplete = async (audioUri: string) => {
+  const beginProcessing = () => {
     setFlow('processing');
+  };
+
+  const handleRecordingError = (message: string) => {
+    console.error('Recording stop failed', message);
+    setError(message);
+    setFlow('idle');
+  };
+
+  const handleRecordingComplete = async (audioUri: string) => {
+    console.log('Recording complete, starting transcription', audioUri);
     try {
-if (!settings.openaiKey) throw new Error('No OpenAI key — add it in Settings first.');
+      if (!settings.openaiKey) throw new Error('No OpenAI key - add it in Settings first.');
       const transcript = await transcribeAudio(audioUri, settings.openaiKey);
       const folderList = flattenFolders(tree);
       const classification = await classifyNote({
         transcript,
         folderList,
+        todoLists,
         settings,
         openaiKey: settings.openaiKey,
       });
-      setPending({ ...classification, transcript, id: 'n-' + Date.now() });
-      setFlow('toast');
+      setPending({ ...classification, transcript, id: makeId('pending') } as PendingCapture);
+      setFlow('review');
     } catch (e: any) {
+      console.error('Recording processing failed', e);
       setError(e.message || 'Something went wrong. Check your API keys in Settings.');
       setFlow('idle');
     }
   };
 
-  // ---- approving / discarding the pending note ----
+  const resolveFolder = (
+    pendingCapture: PendingCapture
+  ): { folderId: string; nextTree: FolderNode } => {
+    if (pendingCapture.existingFolderId) {
+      return { folderId: pendingCapture.existingFolderId, nextTree: tree };
+    }
+
+    if (pendingCapture.newFolderSuggestion) {
+      const added = addChildFolder(
+        tree,
+        pendingCapture.newFolderSuggestion.parentId || 'root',
+        pendingCapture.newFolderSuggestion.name
+      );
+      return { folderId: added.id, nextTree: added.tree };
+    }
+
+    return { folderId: 'root', nextTree: tree };
+  };
+
   const approvePending = (overrideFolderId?: string) => {
     if (!pending) return;
-    let targetFolderId = overrideFolderId;
+    const { folderId, nextTree } = overrideFolderId
+      ? { folderId: overrideFolderId, nextTree: tree }
+      : resolveFolder(pending);
 
-    if (!targetFolderId) {
-      if (pending.existingFolderId) {
-        targetFolderId = pending.existingFolderId;
-      } else if (pending.newFolderSuggestion) {
-        const { tree: newTree, id } = addChildFolder(
-          tree,
-          pending.newFolderSuggestion.parentId || 'root',
-          pending.newFolderSuggestion.name
-        );
-        setTree(newTree);
-        targetFolderId = id;
-      } else {
-        targetFolderId = 'f-misc';
-      }
+    if (nextTree !== tree) setTree(nextTree);
+
+    if (pending.contentType === 'todo_items') {
+      const itemTexts = pending.todoItems || [];
+      const newItems: TodoItem[] = itemTexts.map(item => ({
+        id: makeId('todo'),
+        text: item.text,
+        due: item.due || null,
+        done: false,
+        ts: Date.now(),
+      }));
+
+      setTodoLists(lists => {
+        const existingId = pending.existingTodoListId;
+        if (existingId && lists.some(list => list.id === existingId && list.folderId === folderId)) {
+          return lists.map(list =>
+            list.id === existingId
+              ? { ...list, items: [...list.items, ...newItems] }
+              : list
+          );
+        }
+
+        const newList: TodoList = {
+          id: makeId('list'),
+          title: pending.newTodoListTitle || pending.title || 'To-do list',
+          folderId,
+          items: newItems,
+          ts: Date.now(),
+        };
+        return [newList, ...lists];
+      });
+
+      setPending(null);
+      setFlow('idle');
+      setTab('todos');
+      return;
     }
 
     const note: Note = {
@@ -133,7 +281,7 @@ if (!settings.openaiKey) throw new Error('No OpenAI key — add it in Settings f
       title: pending.title,
       summary: pending.summary,
       transcript: pending.transcript,
-      folderId: targetFolderId!,
+      folderId,
       ts: Date.now(),
       callMode,
       actionItems: (pending.actionItems || []).map(a => ({
@@ -169,7 +317,21 @@ if (!settings.openaiKey) throw new Error('No OpenAI key — add it in Settings f
     );
   };
 
-  // ---- render ----
+  const toggleTodoItem = (listId: string, itemId: string) => {
+    setTodoLists(lists =>
+      lists.map(list =>
+        list.id === listId
+          ? {
+              ...list,
+              items: list.items.map(item =>
+                item.id === itemId ? { ...item, done: !item.done } : item
+              ),
+            }
+          : list
+      )
+    );
+  };
+
   const showTabBar = flow === 'idle' || flow === 'toast';
 
   let screen: React.ReactNode;
@@ -185,6 +347,8 @@ if (!settings.openaiKey) throw new Error('No OpenAI key — add it in Settings f
     screen = (
       <RecordingScreen
         callMode={callMode}
+        onBeginProcessing={beginProcessing}
+        onError={handleRecordingError}
         onComplete={handleRecordingComplete}
       />
     );
@@ -195,7 +359,7 @@ if (!settings.openaiKey) throw new Error('No OpenAI key — add it in Settings f
       <ReviewScreen
         pending={pending!}
         tree={tree}
-        notes={notes}
+        todoLists={todoLists}
         onApprove={approvePending}
         onDiscard={discardPending}
       />
@@ -221,7 +385,7 @@ if (!settings.openaiKey) throw new Error('No OpenAI key — add it in Settings f
         showToast={false}
       />
     );
-} else if (tab === 'folders') {
+  } else if (tab === 'folders') {
     screen = openFolder ? (
       <FolderDetailScreen
         folder={openFolder}
@@ -239,12 +403,29 @@ if (!settings.openaiKey) throw new Error('No OpenAI key — add it in Settings f
         }}
       />
     );
+  } else if (tab === 'keeper') {
+    screen = (
+      <KeeperScreen
+        keeperTree={keeperTree}
+        links={savedLinks}
+        processing={keeperProcessing}
+        error={error}
+      />
+    );
   } else if (tab === 'actions') {
     screen = (
       <ActionsScreen
         notes={notes}
         tree={tree}
         onToggle={toggleActionItem}
+      />
+    );
+  } else if (tab === 'todos') {
+    screen = (
+      <ToDosScreen
+        tree={tree}
+        todoLists={todoLists}
+        onToggle={toggleTodoItem}
       />
     );
   } else {
