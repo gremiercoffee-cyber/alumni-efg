@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import TopBar from '../components/TopBar';
 import { COLORS, FONTS } from '../constants';
-import { countNotes, formatReminderLabel } from '../utils';
+import { formatReminderLabel } from '../utils';
 import { FolderNode, TodoItem, TodoList } from '../types';
 
 interface Props {
@@ -26,67 +26,14 @@ interface Props {
   onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
 }
 
-function openItemCount(lists: TodoList[]): number {
-  return lists.reduce((sum, list) => sum + list.items.filter(item => !item.done).length, 0);
-}
-
 function collectFolderIds(node: FolderNode, ids = new Set<string>()): Set<string> {
   ids.add(node.id);
   node.children.forEach(child => collectFolderIds(child, ids));
   return ids;
 }
 
-function findFolder(node: FolderNode, id: string): FolderNode | null {
-  if (node.id === id) return node;
-  for (const child of node.children) {
-    const found = findFolder(child, id);
-    if (found) return found;
-  }
-  return null;
-}
-
-function FolderTodoRow({
-  folder,
-  todoLists,
-  depth,
-  selectedFolderId,
-  onSelect,
-}: {
-  folder: FolderNode;
-  todoLists: TodoList[];
-  depth: number;
-  selectedFolderId: string | null;
-  onSelect: (folderId: string) => void;
-}) {
-  const counts: Record<string, number> = {};
-  todoLists.forEach(list => {
-    counts[list.folderId] = (counts[list.folderId] || 0) + list.items.filter(item => !item.done).length;
-  });
-  const total = countNotes(folder, counts);
-  const active = selectedFolderId === folder.id;
-
-  return (
-    <>
-      <TouchableOpacity
-        style={[styles.folderRow, active && styles.folderRowActive, { paddingLeft: 20 + depth * 16 }]}
-        onPress={() => onSelect(folder.id)}
-        activeOpacity={0.75}
-      >
-        <Text style={styles.folderName}>{folder.name}</Text>
-        {total > 0 && <Text style={styles.folderCount}>{total}</Text>}
-      </TouchableOpacity>
-      {folder.children.map(child => (
-        <FolderTodoRow
-          key={child.id}
-          folder={child}
-          todoLists={todoLists}
-          depth={depth + 1}
-          selectedFolderId={selectedFolderId}
-          onSelect={onSelect}
-        />
-      ))}
-    </>
-  );
+function countOpenItems(lists: TodoList[]): number {
+  return lists.reduce((sum, list) => sum + list.items.filter(item => !item.done).length, 0);
 }
 
 function TodoRow({
@@ -187,9 +134,11 @@ function TodoRow({
   );
 }
 
-function TodoListCard({
+function TodoListSection({
   list,
   focused,
+  expanded,
+  onToggleExpanded,
   onToggle,
   onAddItem,
   onEditReminder,
@@ -201,6 +150,8 @@ function TodoListCard({
 }: {
   list: TodoList;
   focused: boolean;
+  expanded: boolean;
+  onToggleExpanded: () => void;
   onToggle: (listId: string, itemId: string) => void;
   onAddItem: (listId: string, text: string) => void;
   onEditReminder: (listId: string, itemId: string) => void;
@@ -266,90 +217,236 @@ function TodoListCard({
   };
 
   return (
-    <View style={[styles.list, focused && styles.listFocused]}>
-      {editingListTitle ? (
-        <TextInput
-          style={styles.listTitleInput}
-          value={listTitleDraft}
-          onChangeText={setListTitleDraft}
-          autoFocus
-          onSubmitEditing={saveListTitle}
-          onBlur={saveListTitle}
-          returnKeyType="done"
-        />
-      ) : (
-        <TouchableOpacity onPress={() => setEditingListTitle(true)} activeOpacity={0.8}>
-          <Text style={styles.listTitle}>{list.title}</Text>
-        </TouchableOpacity>
-      )}
+    <View style={[styles.listCard, focused && styles.listFocused]}>
+      <TouchableOpacity
+        style={styles.listHeader}
+        onPress={onToggleExpanded}
+        activeOpacity={0.85}
+      >
+        <View style={styles.listHeaderTextWrap}>
+          {editingListTitle ? (
+            <TextInput
+              style={styles.listTitleInput}
+              value={listTitleDraft}
+              onChangeText={setListTitleDraft}
+              autoFocus
+              onSubmitEditing={saveListTitle}
+              onBlur={saveListTitle}
+              returnKeyType="done"
+            />
+          ) : (
+            <TouchableOpacity onPress={() => setEditingListTitle(true)} activeOpacity={0.8}>
+              <Text style={styles.listTitle}>{list.title}</Text>
+            </TouchableOpacity>
+          )}
+          <Text style={styles.listMeta}>
+            {activeItems.length} open{completedItems.length ? ` · ${completedItems.length} done` : ''}
+          </Text>
+        </View>
+        <Text style={styles.chevron}>{expanded ? '−' : '+'}</Text>
+      </TouchableOpacity>
 
-      {activeItems.length === 0 ? (
-        <Text style={styles.emptyList}>No open items. Add one below.</Text>
-      ) : (
-        activeItems.map(item => (
-          <TodoRow
-            key={item.id}
-            item={item}
-            listId={list.id}
-            editing={editingItemId === item.id}
-            editDraft={editingText}
-            onChangeDraft={setEditingText}
-            onStartEdit={() => startItemEdit(item)}
-            onSaveEdit={saveItemEdit}
-            onCancelEdit={cancelItemEdit}
-            onToggle={onToggle}
-            onEditReminder={onEditReminder}
-            onDeleteItem={onDeleteItem}
-          />
-        ))
-      )}
+      {expanded ? (
+        <View style={styles.listBody}>
+          {activeItems.length === 0 ? (
+            <Text style={styles.emptyList}>No open items. Add one below.</Text>
+          ) : (
+            activeItems.map(item => (
+              <TodoRow
+                key={item.id}
+                item={item}
+                listId={list.id}
+                editing={editingItemId === item.id}
+                editDraft={editingText}
+                onChangeDraft={setEditingText}
+                onStartEdit={() => startItemEdit(item)}
+                onSaveEdit={saveItemEdit}
+                onCancelEdit={cancelItemEdit}
+                onToggle={onToggle}
+                onEditReminder={onEditReminder}
+                onDeleteItem={onDeleteItem}
+              />
+            ))
+          )}
 
-      <View style={styles.manualEntry}>
-        <TextInput
-          ref={inputRef}
-          style={styles.manualInput}
-          value={draft}
-          onChangeText={setDraft}
-          onSubmitEditing={submit}
-          placeholder="Add an item"
-          placeholderTextColor={COLORS.brownFaint}
-          returnKeyType="done"
-        />
-        <TouchableOpacity style={styles.addBtn} onPress={submit} activeOpacity={0.8}>
-          <Text style={styles.addBtnText}>+</Text>
-        </TouchableOpacity>
-      </View>
+          <View style={styles.manualEntry}>
+            <TextInput
+              ref={inputRef}
+              style={styles.manualInput}
+              value={draft}
+              onChangeText={setDraft}
+              onSubmitEditing={submit}
+              placeholder="Add an item…"
+              placeholderTextColor={COLORS.brownFaint}
+              returnKeyType="done"
+              blurOnSubmit={false}
+            />
+            <TouchableOpacity style={styles.addBtn} onPress={submit} activeOpacity={0.8}>
+              <Text style={styles.addBtnText}>+</Text>
+            </TouchableOpacity>
+          </View>
 
-      {completedItems.length > 0 ? (
-        <View style={styles.completedWrap}>
-          <TouchableOpacity
-            style={styles.completedHeader}
-            onPress={onToggleCompletedExpanded}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.completedHeaderText}>
-              {completedExpanded ? 'Hide' : 'Show'} Completed ({completedItems.length})
-            </Text>
-          </TouchableOpacity>
-          {completedExpanded
-            ? completedItems.map(item => (
-                <TodoRow
-                  key={item.id}
-                  item={item}
-                  listId={list.id}
-                  editing={editingItemId === item.id}
-                  editDraft={editingText}
-                  onChangeDraft={setEditingText}
-                  onStartEdit={() => startItemEdit(item)}
-                  onSaveEdit={saveItemEdit}
-                  onCancelEdit={cancelItemEdit}
-                  onToggle={onToggle}
-                  onEditReminder={onEditReminder}
-                  onDeleteItem={onDeleteItem}
-                  helperText="Tap the checkbox to move it back to active"
-                />
-              ))
-            : null}
+          {completedItems.length > 0 ? (
+            <View style={styles.completedWrap}>
+              <TouchableOpacity
+                style={styles.completedHeader}
+                onPress={onToggleCompletedExpanded}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.completedHeaderText}>
+                  {completedExpanded ? 'Hide' : 'Show'} Completed ({completedItems.length})
+                </Text>
+              </TouchableOpacity>
+              {completedExpanded
+                ? completedItems.map(item => (
+                    <TodoRow
+                      key={item.id}
+                      item={item}
+                      listId={list.id}
+                      editing={editingItemId === item.id}
+                      editDraft={editingText}
+                      onChangeDraft={setEditingText}
+                      onStartEdit={() => startItemEdit(item)}
+                      onSaveEdit={saveItemEdit}
+                      onCancelEdit={cancelItemEdit}
+                      onToggle={onToggle}
+                      onEditReminder={onEditReminder}
+                      onDeleteItem={onDeleteItem}
+                      helperText="Tap the checkbox to move it back to active"
+                    />
+                  ))
+                : null}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function FolderSection({
+  folder,
+  todoLists,
+  focusedFolderId,
+  focusedListId,
+  expandedFolders,
+  expandedLists,
+  expandedCompleted,
+  setExpandedFolders,
+  setExpandedLists,
+  setExpandedCompleted,
+  onToggle,
+  onAddItem,
+  onEditReminder,
+  onRenameList,
+  onEditItem,
+  onDeleteItem,
+}: {
+  folder: FolderNode;
+  todoLists: TodoList[];
+  focusedFolderId: string | null;
+  focusedListId: string | null;
+  expandedFolders: Record<string, boolean>;
+  expandedLists: Record<string, boolean>;
+  expandedCompleted: Record<string, boolean>;
+  setExpandedFolders: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  setExpandedLists: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  setExpandedCompleted: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  onToggle: (listId: string, itemId: string) => void;
+  onAddItem: (listId: string, text: string) => void;
+  onEditReminder: (listId: string, itemId: string) => void;
+  onRenameList: (listId: string, title: string) => void;
+  onEditItem: (listId: string, itemId: string, text: string) => void | Promise<void>;
+  onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
+}) {
+  const descendantIds = useMemo(() => Array.from(collectFolderIds(folder)), [folder]);
+  const listsInFolder = todoLists.filter(list => list.folderId === folder.id);
+  const childFolders = folder.children.filter(child =>
+    todoLists.some(list => collectFolderIds(child).has(list.folderId))
+  );
+  const openCount = todoLists
+    .filter(list => descendantIds.includes(list.folderId))
+    .reduce((sum, list) => sum + list.items.filter(item => !item.done).length, 0);
+  const expanded = expandedFolders[folder.id] ?? true;
+  const isFocused = focusedFolderId === folder.id;
+
+  if (listsInFolder.length === 0 && childFolders.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={[styles.folderSection, isFocused && styles.folderSectionFocused]}>
+      <TouchableOpacity
+        style={styles.folderHeader}
+        onPress={() =>
+          setExpandedFolders(current => ({
+            ...current,
+            [folder.id]: !(current[folder.id] ?? true),
+          }))
+        }
+        activeOpacity={0.85}
+      >
+        <View style={styles.folderHeaderTextWrap}>
+          <Text style={styles.folderTitle}>{folder.name}</Text>
+          <Text style={styles.folderMeta}>
+            {openCount} open{listsInFolder.length ? ` · ${listsInFolder.length} list${listsInFolder.length === 1 ? '' : 's'}` : ''}
+          </Text>
+        </View>
+        <Text style={styles.chevron}>{expanded ? '−' : '+'}</Text>
+      </TouchableOpacity>
+
+      {expanded ? (
+        <View style={styles.folderBody}>
+          {listsInFolder.map(list => (
+            <TodoListSection
+              key={list.id}
+              list={list}
+              focused={focusedListId === list.id}
+              expanded={expandedLists[list.id] ?? true}
+              onToggleExpanded={() =>
+                setExpandedLists(current => ({
+                  ...current,
+                  [list.id]: !(current[list.id] ?? true),
+                }))
+              }
+              onToggle={onToggle}
+              onAddItem={onAddItem}
+              onEditReminder={onEditReminder}
+              onRenameList={onRenameList}
+              onEditItem={onEditItem}
+              onDeleteItem={onDeleteItem}
+              completedExpanded={!!expandedCompleted[list.id]}
+              onToggleCompletedExpanded={() =>
+                setExpandedCompleted(current => ({
+                  ...current,
+                  [list.id]: !current[list.id],
+                }))
+              }
+            />
+          ))}
+
+          {childFolders.map(child => (
+            <View key={child.id} style={styles.childFolderWrap}>
+              <FolderSection
+                folder={child}
+                todoLists={todoLists}
+                focusedFolderId={focusedFolderId}
+                focusedListId={focusedListId}
+                expandedFolders={expandedFolders}
+                expandedLists={expandedLists}
+                expandedCompleted={expandedCompleted}
+                setExpandedFolders={setExpandedFolders}
+                setExpandedLists={setExpandedLists}
+                setExpandedCompleted={setExpandedCompleted}
+                onToggle={onToggle}
+                onAddItem={onAddItem}
+                onEditReminder={onEditReminder}
+                onRenameList={onRenameList}
+                onEditItem={onEditItem}
+                onDeleteItem={onDeleteItem}
+              />
+            </View>
+          ))}
         </View>
       ) : null}
     </View>
@@ -368,78 +465,137 @@ export default function ToDosScreen({
   onEditItem,
   onDeleteItem,
 }: Props) {
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(focusedFolderId);
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [expandedLists, setExpandedLists] = useState<Record<string, boolean>>({});
   const [expandedCompleted, setExpandedCompleted] = useState<Record<string, boolean>>({});
-  const selectedFolder = selectedFolderId ? findFolder(tree, selectedFolderId) : null;
-  const selectedIds = selectedFolder ? collectFolderIds(selectedFolder) : null;
-  const activeLists = selectedFolderId
-    ? todoLists.filter(list => selectedIds?.has(list.folderId))
-    : todoLists;
-  const open = openItemCount(todoLists);
+  const rootLists = todoLists.filter(list => list.folderId === 'root');
+  const visibleFolders = tree.children.filter(folder =>
+    todoLists.some(list => collectFolderIds(folder).has(list.folderId))
+  );
+  const openCount = countOpenItems(todoLists);
+
+  useEffect(() => {
+    setExpandedFolders(current => {
+      const next = { ...current };
+      tree.children.forEach(folder => {
+        if (next[folder.id] === undefined) {
+          next[folder.id] = true;
+        }
+      });
+      return next;
+    });
+  }, [tree]);
+
+  useEffect(() => {
+    setExpandedLists(current => {
+      const next = { ...current };
+      todoLists.forEach(list => {
+        if (next[list.id] === undefined) {
+          next[list.id] = true;
+        }
+      });
+      return next;
+    });
+  }, [todoLists]);
 
   useEffect(() => {
     if (focusedFolderId) {
-      setSelectedFolderId(focusedFolderId);
+      setExpandedFolders(current => ({ ...current, [focusedFolderId]: true }));
     }
-  }, [focusedFolderId]);
+    if (focusedListId) {
+      setExpandedLists(current => ({ ...current, [focusedListId]: true }));
+    }
+  }, [focusedFolderId, focusedListId]);
+
+  const allCollapsed = visibleFolders.every(folder => !(expandedFolders[folder.id] ?? true));
 
   return (
     <View style={styles.container}>
-      <TopBar subtitle={`${open} open`} title="To-Dos" />
+      <TopBar subtitle="Category → list → items" title="To-Dos" />
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <Text style={styles.heroCount}>{open}</Text>
-          <Text style={styles.heroLabel}>{open === 1 ? 'Open task' : 'Open tasks'}</Text>
+        <View style={styles.toolbar}>
+          <View style={styles.toolbarTextWrap}>
+            <Text style={styles.toolbarTitle}>Your lists</Text>
+            <Text style={styles.toolbarSubtitle}>{openCount} open items across your categories</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.toolbarBtn}
+            onPress={() =>
+              setExpandedFolders(current => {
+                const next: Record<string, boolean> = { ...current };
+                visibleFolders.forEach(folder => {
+                  next[folder.id] = allCollapsed;
+                });
+                return next;
+              })
+            }
+            activeOpacity={0.85}
+          >
+            <Text style={styles.toolbarBtnText}>{allCollapsed ? 'Expand all' : 'Collapse all'}</Text>
+          </TouchableOpacity>
         </View>
 
-        {tree.children.length > 0 && (
-          <View style={styles.folderList}>
-            <TouchableOpacity
-              style={[styles.folderRow, selectedFolderId === null && styles.folderRowActive]}
-              onPress={() => setSelectedFolderId(null)}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.folderName}>All to-dos</Text>
-              {open > 0 && <Text style={styles.folderCount}>{open}</Text>}
-            </TouchableOpacity>
-            {tree.children.map(folder => (
-              <FolderTodoRow
-                key={folder.id}
-                folder={folder}
-                todoLists={todoLists}
-                depth={0}
-                selectedFolderId={selectedFolderId}
-                onSelect={setSelectedFolderId}
-              />
-            ))}
-          </View>
-        )}
-
-        {activeLists.length === 0 ? (
+        {todoLists.length === 0 ? (
           <Text style={styles.empty}>
             To-do lists will appear here when you speak a clear list of tasks into the Home mic.
           </Text>
         ) : (
-          activeLists.map(list => (
-            <TodoListCard
-              key={list.id}
-              list={list}
-              focused={focusedListId === list.id}
-              onToggle={onToggle}
-              onAddItem={onAddItem}
-              onEditReminder={onEditReminder}
-              onRenameList={onRenameList}
-              onEditItem={onEditItem}
-              onDeleteItem={onDeleteItem}
-              completedExpanded={!!expandedCompleted[list.id]}
-              onToggleCompletedExpanded={() =>
-                setExpandedCompleted(current => ({
-                  ...current,
-                  [list.id]: !current[list.id],
-                }))
-              }
-            />
-          ))
+          <>
+            {rootLists.length > 0 ? (
+              <View style={styles.uncategorizedSection}>
+                <Text style={styles.uncategorizedTitle}>Uncategorized</Text>
+                {rootLists.map(list => (
+                  <TodoListSection
+                    key={list.id}
+                    list={list}
+                    focused={focusedListId === list.id}
+                    expanded={expandedLists[list.id] ?? true}
+                    onToggleExpanded={() =>
+                      setExpandedLists(current => ({
+                        ...current,
+                        [list.id]: !(current[list.id] ?? true),
+                      }))
+                    }
+                    onToggle={onToggle}
+                    onAddItem={onAddItem}
+                    onEditReminder={onEditReminder}
+                    onRenameList={onRenameList}
+                    onEditItem={onEditItem}
+                    onDeleteItem={onDeleteItem}
+                    completedExpanded={!!expandedCompleted[list.id]}
+                    onToggleCompletedExpanded={() =>
+                      setExpandedCompleted(current => ({
+                        ...current,
+                        [list.id]: !current[list.id],
+                      }))
+                    }
+                  />
+                ))}
+              </View>
+            ) : null}
+
+            {visibleFolders.map(folder => (
+              <FolderSection
+                key={folder.id}
+                folder={folder}
+                todoLists={todoLists}
+                focusedFolderId={focusedFolderId}
+                focusedListId={focusedListId}
+                expandedFolders={expandedFolders}
+                expandedLists={expandedLists}
+                expandedCompleted={expandedCompleted}
+                setExpandedFolders={setExpandedFolders}
+                setExpandedLists={setExpandedLists}
+                setExpandedCompleted={setExpandedCompleted}
+                onToggle={onToggle}
+                onAddItem={onAddItem}
+                onEditReminder={onEditReminder}
+                onRenameList={onRenameList}
+                onEditItem={onEditItem}
+                onDeleteItem={onDeleteItem}
+              />
+            ))}
+          </>
         )}
       </ScrollView>
     </View>
@@ -449,48 +605,39 @@ export default function ToDosScreen({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   content: { padding: 12, paddingBottom: 28 },
-  hero: {
-    alignItems: 'center',
-    paddingTop: 4,
-    paddingBottom: 18,
-  },
-  heroCount: {
-    fontSize: 54,
-    fontWeight: '700',
-    color: COLORS.brown,
-    lineHeight: 58,
-  },
-  heroLabel: {
-    fontSize: FONTS.size.xs,
-    color: COLORS.brownLight,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  folderList: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
-    marginBottom: 16,
-  },
-  folderRow: {
+  toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingRight: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-    gap: 8,
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 16,
+    paddingHorizontal: 2,
   },
-  folderRowActive: {
-    backgroundColor: COLORS.white50,
-  },
-  folderName: {
+  toolbarTextWrap: {
     flex: 1,
-    fontSize: FONTS.size.sm,
+  },
+  toolbarTitle: {
+    fontSize: FONTS.size.lg,
+    fontWeight: '700',
     color: COLORS.brown,
   },
-  folderCount: {
+  toolbarSubtitle: {
     fontSize: FONTS.size.xs,
     color: COLORS.brownFaint,
+    marginTop: 3,
+  },
+  toolbarBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    backgroundColor: COLORS.white50,
+  },
+  toolbarBtnText: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brown,
+    fontWeight: '600',
   },
   empty: {
     fontSize: FONTS.size.sm,
@@ -500,21 +647,94 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     lineHeight: 22,
   },
-  list: {
-    marginBottom: 18,
-    backgroundColor: 'rgba(255,255,255,0.24)',
+  uncategorizedSection: {
+    marginBottom: 16,
+  },
+  uncategorizedTitle: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.brownLight,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  folderSection: {
+    marginBottom: 14,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(110, 83, 67, 0.1)',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  folderSectionFocused: {
+    borderColor: COLORS.brown,
+  },
+  folderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(123, 93, 72, 0.1)',
+  },
+  folderHeaderTextWrap: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  folderTitle: {
+    fontSize: FONTS.size.md,
+    fontWeight: '700',
+    color: COLORS.brown,
+  },
+  folderMeta: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brownLight,
+    marginTop: 4,
+  },
+  chevron: {
+    fontSize: 22,
+    lineHeight: 24,
+    color: COLORS.brown,
+    width: 20,
+    textAlign: 'center',
+  },
+  folderBody: {
+    padding: 10,
+    gap: 10,
+  },
+  childFolderWrap: {
+    paddingLeft: 8,
+  },
+  listCard: {
+    backgroundColor: COLORS.white50,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
     borderRadius: 12,
-    padding: 12,
+    overflow: 'hidden',
   },
   listFocused: {
-    borderWidth: 1,
     borderColor: COLORS.brown,
+  },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  listHeaderTextWrap: {
+    flex: 1,
+    paddingRight: 12,
   },
   listTitle: {
     fontSize: FONTS.size.md,
     fontWeight: '700',
     color: COLORS.brown,
-    marginBottom: 8,
+  },
+  listMeta: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brownFaint,
+    marginTop: 3,
   },
   listTitleInput: {
     backgroundColor: COLORS.white60,
@@ -525,8 +745,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: FONTS.size.md,
     color: COLORS.brown,
-    marginBottom: 8,
     fontWeight: '700',
+  },
+  listBody: {
+    paddingHorizontal: 10,
+    paddingBottom: 10,
   },
   emptyList: {
     fontSize: FONTS.size.sm,
