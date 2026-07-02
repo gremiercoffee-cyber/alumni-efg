@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   SafeAreaView,
   View,
@@ -6,6 +6,8 @@ import {
   Platform,
   StatusBar,
   Linking,
+  TouchableOpacity,
+  Text,
 } from 'react-native';
 import HomeScreen from './src/screens/HomeScreen';
 import RecordingScreen from './src/screens/RecordingScreen';
@@ -19,23 +21,31 @@ import KeeperScreen from './src/screens/KeeperScreen';
 import ToDosScreen from './src/screens/ToDosScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import TabBar from './src/components/TabBar';
+import ScheduleDrawer, { ScheduleEntry } from './src/components/ScheduleDrawer';
 import { loadAppState, saveAppState } from './src/storage';
-import { classifyLink, classifyNote } from './src/lib/classify';
+import { classifyKeeperItem, classifyNote } from './src/lib/classify';
 import { transcribeAudio } from './src/lib/transcribe';
-import { addChildFolder, extractFirstUrl, flattenFolders, makeId } from './src/utils';
+import {
+  addChildFolder,
+  classifyDueBucket,
+  extractFirstUrl,
+  flattenFolders,
+  makeId,
+} from './src/utils';
 import { EMPTY_KEEPER_TREE, EMPTY_TREE, COLORS } from './src/constants';
 import type {
   FolderNode,
   Note,
   PendingCapture,
   AppSettings,
-  SavedLink,
+  KeeperItem,
   TodoList,
   TodoItem,
 } from './src/types';
 
-export type Tab = 'home' | 'folders' | 'keeper' | 'actions' | 'todos' | 'settings';
+export type Tab = 'home' | 'notes' | 'keeper' | 'actions' | 'todos' | 'settings';
 export type Flow = 'idle' | 'callPrompt' | 'recording' | 'processing' | 'toast' | 'review';
+type CaptureTarget = 'general' | 'keeper';
 
 function sharedTextFromUrl(url: string): string | null {
   const match = url.match(/[?&]text=([^&]+)/);
@@ -46,10 +56,11 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('home');
   const [flow, setFlow] = useState<Flow>('idle');
   const [callMode, setCallMode] = useState(false);
+  const [captureTarget, setCaptureTarget] = useState<CaptureTarget>('general');
   const [tree, setTree] = useState<FolderNode>(EMPTY_TREE);
   const [keeperTree, setKeeperTree] = useState<FolderNode>(EMPTY_KEEPER_TREE);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [savedLinks, setSavedLinks] = useState<SavedLink[]>([]);
+  const [keeperItems, setKeeperItems] = useState<KeeperItem[]>([]);
   const [todoLists, setTodoLists] = useState<TodoList[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     openaiKey: '',
@@ -69,6 +80,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keeperProcessing, setKeeperProcessing] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const handledShareUrls = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -77,7 +89,7 @@ export default function App() {
         if (s.tree) setTree(s.tree);
         if (s.keeperTree) setKeeperTree(s.keeperTree);
         if (s.notes) setNotes(s.notes);
-        if (s.savedLinks) setSavedLinks(s.savedLinks);
+        if (s.keeperItems) setKeeperItems(s.keeperItems);
         if (s.todoLists) setTodoLists(s.todoLists);
         if (s.settings) setSettings(prev => ({ ...prev, ...s.settings }));
       }
@@ -87,19 +99,40 @@ export default function App() {
 
   useEffect(() => {
     if (!loaded) return;
-    saveAppState({ tree, keeperTree, notes, savedLinks, todoLists, settings });
-  }, [tree, keeperTree, notes, savedLinks, todoLists, settings, loaded]);
+    saveAppState({ tree, keeperTree, notes, keeperItems, todoLists, settings });
+  }, [tree, keeperTree, notes, keeperItems, todoLists, settings, loaded]);
 
-  const handleSharedText = async (sharedText: string) => {
-    const url = extractFirstUrl(sharedText);
-    setFlow('idle');
+  const scheduleEntries = useMemo<ScheduleEntry[]>(() => {
+    const fromActions = notes.flatMap(note =>
+      note.actionItems
+        .filter(item => !item.done && item.due)
+        .map(item => ({
+          id: `${note.id}-${item.text}`,
+          title: item.text,
+          subtitle: note.title,
+          due: item.due || '',
+          bucket: classifyDueBucket(item.due) || 'later',
+        }))
+    );
+
+    const fromTodos = todoLists.flatMap(list =>
+      list.items
+        .filter(item => !item.done && item.due)
+        .map(item => ({
+          id: `${list.id}-${item.id}`,
+          title: item.text,
+          subtitle: list.title,
+          due: item.due || '',
+          bucket: classifyDueBucket(item.due) || 'later',
+        }))
+    );
+
+    return [...fromActions, ...fromTodos];
+  }, [notes, todoLists]);
+
+  const saveKeeperItem = async (text: string, url?: string | null) => {
     setTab('keeper');
     setError(null);
-
-    if (!url) {
-      setError('Shared text did not include a link.');
-      return;
-    }
 
     if (!settings.openaiKey) {
       setError('No OpenAI key - add it in Settings first.');
@@ -108,9 +141,9 @@ export default function App() {
 
     setKeeperProcessing(true);
     try {
-      const classification = await classifyLink({
-        sharedText,
-        url,
+      const classification = await classifyKeeperItem({
+        text,
+        url: url || null,
         keeperTree,
         openaiKey: settings.openaiKey,
       });
@@ -128,23 +161,31 @@ export default function App() {
         categoryId = added.id;
       }
 
-      const link: SavedLink = {
-        id: makeId('link'),
-        url,
-        title: classification.title || url,
-        summary: classification.summary || sharedText,
+      const item: KeeperItem = {
+        id: makeId('keep'),
+        kind: url ? 'link' : 'text',
+        text,
+        url: url || null,
+        title: classification.title || (url || text),
+        summary: classification.summary || text,
         categoryId: categoryId || 'keeper-root',
         ts: Date.now(),
       };
 
       setKeeperTree(nextKeeperTree);
-      setSavedLinks(items => [link, ...items]);
+      setKeeperItems(items => [item, ...items]);
     } catch (e: any) {
-      console.error('Shared link processing failed', e);
-      setError(e.message || 'Could not save shared link.');
+      console.error('Keeper save failed', e);
+      setError(e.message || 'Could not save to Keeper.');
     } finally {
       setKeeperProcessing(false);
+      setFlow('idle');
     }
+  };
+
+  const handleSharedText = async (sharedText: string) => {
+    const url = extractFirstUrl(sharedText);
+    await saveKeeperItem(sharedText, url || null);
   };
 
   useEffect(() => {
@@ -152,7 +193,9 @@ export default function App() {
       if (handledShareUrls.current.has(url)) return;
       handledShareUrls.current.add(url);
       const sharedText = sharedTextFromUrl(url);
-      if (sharedText) handleSharedText(sharedText);
+      if (sharedText) {
+        handleSharedText(sharedText);
+      }
     };
 
     Linking.getInitialURL().then(url => {
@@ -164,17 +207,28 @@ export default function App() {
   }, [keeperTree, settings.openaiKey]);
 
   const startRecording = () => {
+    setCaptureTarget('general');
     setCallMode(false);
     setError(null);
     setFlow('recording');
   };
 
+  const startKeeperRecording = () => {
+    setCaptureTarget('keeper');
+    setCallMode(false);
+    setError(null);
+    setTab('keeper');
+    setFlow('recording');
+  };
+
   const startCallPrompt = () => {
+    setCaptureTarget('general');
     setError(null);
     setFlow('callPrompt');
   };
 
   const confirmCallRecording = () => {
+    setCaptureTarget('general');
     setCallMode(true);
     setFlow('recording');
   };
@@ -196,6 +250,12 @@ export default function App() {
     try {
       if (!settings.openaiKey) throw new Error('No OpenAI key - add it in Settings first.');
       const transcript = await transcribeAudio(audioUri, settings.openaiKey);
+
+      if (captureTarget === 'keeper') {
+        await saveKeeperItem(transcript, null);
+        return;
+      }
+
       const folderList = flattenFolders(tree);
       const classification = await classifyNote({
         transcript,
@@ -210,6 +270,8 @@ export default function App() {
       console.error('Recording processing failed', e);
       setError(e.message || 'Something went wrong. Check your API keys in Settings.');
       setFlow('idle');
+    } finally {
+      setCaptureTarget('general');
     }
   };
 
@@ -241,8 +303,7 @@ export default function App() {
     if (nextTree !== tree) setTree(nextTree);
 
     if (pending.contentType === 'todo_items') {
-      const itemTexts = pending.todoItems || [];
-      const newItems: TodoItem[] = itemTexts.map(item => ({
+      const newItems: TodoItem[] = pending.todoItems.map(item => ({
         id: makeId('todo'),
         text: item.text,
         due: item.due || null,
@@ -284,7 +345,7 @@ export default function App() {
       folderId,
       ts: Date.now(),
       callMode,
-      actionItems: (pending.actionItems || []).map(a => ({
+      actionItems: pending.actionItems.map(a => ({
         text: a.text,
         due: a.due || null,
         done: false,
@@ -347,6 +408,7 @@ export default function App() {
     screen = (
       <RecordingScreen
         callMode={callMode}
+        target={captureTarget === 'keeper' ? 'keeper' : 'note'}
         onBeginProcessing={beginProcessing}
         onError={handleRecordingError}
         onComplete={handleRecordingComplete}
@@ -385,7 +447,7 @@ export default function App() {
         showToast={false}
       />
     );
-  } else if (tab === 'folders') {
+  } else if (tab === 'notes') {
     screen = openFolder ? (
       <FolderDetailScreen
         folder={openFolder}
@@ -407,9 +469,13 @@ export default function App() {
     screen = (
       <KeeperScreen
         keeperTree={keeperTree}
-        links={savedLinks}
+        items={keeperItems}
         processing={keeperProcessing}
         error={error}
+        onAddText={text => {
+          saveKeeperItem(text, null);
+        }}
+        onRecord={startKeeperRecording}
       />
     );
   } else if (tab === 'actions') {
@@ -443,15 +509,30 @@ export default function App() {
       <View style={styles.inner}>
         {screen}
         {showTabBar && (
-          <TabBar
-            active={tab}
-            onChange={t => {
-              setFlow('idle');
-              setTab(t as Tab);
-              setOpenFolder(null);
-            }}
-          />
+          <>
+            <TouchableOpacity
+              style={styles.scheduleHandle}
+              onPress={() => setScheduleOpen(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.scheduleHandleText}>Plan</Text>
+            </TouchableOpacity>
+            <TabBar
+              active={tab}
+              onChange={t => {
+                setFlow('idle');
+                setTab(t as Tab);
+                setOpenFolder(null);
+              }}
+            />
+          </>
         )}
+        <ScheduleDrawer
+          visible={scheduleOpen}
+          routineText={settings.schedule}
+          entries={scheduleEntries}
+          onClose={() => setScheduleOpen(false)}
+        />
       </View>
     </SafeAreaView>
   );
@@ -465,5 +546,21 @@ const styles = StyleSheet.create({
   },
   inner: {
     flex: 1,
+  },
+  scheduleHandle: {
+    position: 'absolute',
+    right: 0,
+    top: '38%',
+    zIndex: 20,
+    backgroundColor: COLORS.brown,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+  },
+  scheduleHandleText: {
+    color: COLORS.bg,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

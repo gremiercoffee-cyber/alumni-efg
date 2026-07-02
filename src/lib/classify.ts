@@ -15,14 +15,14 @@ interface ClassifyInput {
   openaiKey: string;
 }
 
-interface ClassifyLinkInput {
-  sharedText: string;
-  url: string;
+interface ClassifyKeeperInput {
+  text: string;
   keeperTree: FolderNode;
   openaiKey: string;
+  url?: string | null;
 }
 
-export interface LinkClassification {
+export interface KeeperClassification {
   title: string;
   summary: string;
   existingCategoryId: string | null;
@@ -162,41 +162,42 @@ Rules:
   );
 }
 
-export async function classifyLink({
-  sharedText,
-  url,
+export async function classifyKeeperItem({
+  text,
   keeperTree,
   openaiKey,
-}: ClassifyLinkInput): Promise<LinkClassification> {
+  url,
+}: ClassifyKeeperInput): Promise<KeeperClassification> {
   const keeperFolders = flattenFolders(keeperTree);
   const categoryDesc = folderContext(
     keeperFolders,
     '(no Keeper categories exist yet - create the first useful category)'
   );
 
-  const system = `You organize saved links for a personal read/watch/save-later app area called Keeper.
+  const system = `You organize saved things for a personal area called Keeper.
 
 Existing Keeper categories:
 ${categoryDesc}
 
 Respond ONLY with raw JSON, no markdown fences, no preamble, exactly this shape:
 {
-  "title": "short human-readable title for the link",
-  "summary": "one short preview sentence based on the URL and shared text",
+  "title": "short human-readable title",
+  "summary": "one short summary",
   "existingCategoryId": "id of best matching Keeper category, or null",
   "newCategorySuggestion": { "parentId": "id of closest parent (use keeper-root if none fit)", "name": "new category name" } or null
 }
 
 Rules:
-- Keeper categories are independent from note folders.
-- Use practical categories for saved links, such as recipes, gift ideas, articles to read, places, videos, shopping, reference, or anything more specific that fits.
+- Keeper categories are independent from notes and to-dos.
+- A Keeper item may be a shared link, a typed thought, or a dictated thing the person wants to keep around.
+- Use practical categories such as recipes, gift ideas, quotes, references, ideas, articles to read, shopping, or anything more specific that fits.
 - Prefer an existing Keeper category if it fits well.
 - If no category fits, suggest a concise new category.
 - Output strictly valid JSON only.`;
 
-  return askOpenAI(
-    openaiKey,
-    system,
-    `Shared text:\n"""\n${sharedText}\n"""\n\nURL:\n${url}`
-  );
+  const user = url
+    ? `Saved text:\n"""\n${text}\n"""\n\nURL:\n${url}`
+    : `Saved text:\n"""\n${text}\n"""`;
+
+  return askOpenAI(openaiKey, system, user);
 }

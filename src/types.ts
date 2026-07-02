@@ -57,9 +57,11 @@ export interface PendingTodoCapture extends BasePendingCapture {
 
 export type PendingCapture = PendingNote | PendingTodoCapture;
 
-export interface SavedLink {
+export interface KeeperItem {
   id: string;
-  url: string;
+  kind: 'link' | 'text';
+  text: string;
+  url: string | null;
   title: string;
   summary: string;
   categoryId: string;

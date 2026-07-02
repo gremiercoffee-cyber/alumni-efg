@@ -1,71 +1,134 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
+  View,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { COLORS, FONTS } from '../constants';
 
 interface Props {
   callMode: boolean;
+  target?: 'note' | 'keeper';
   onBeginProcessing: () => void;
   onError: (message: string) => void;
   onComplete: (audioUri: string) => void;
 }
 
-export default function RecordingScreen({ callMode, onBeginProcessing, onError, onComplete }: Props) {
+const recordingOptions: Audio.RecordingOptions = {
+  android: {
+    extension: '.m4a',
+    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 44100,
+    numberOfChannels: 2,
+    bitRate: 128000,
+  },
+  ios: {
+    extension: '.m4a',
+    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+    audioQuality: Audio.IOSAudioQuality.HIGH,
+    sampleRate: 44100,
+    numberOfChannels: 2,
+    bitRate: 128000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: {},
+};
+
+export default function RecordingScreen({
+  callMode,
+  target = 'note',
+  onBeginProcessing,
+  onError,
+  onComplete,
+}: Props) {
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startPromiseRef = useRef<Promise<void> | null>(null);
+
+  const reportError = (prefix: string, err: unknown) => {
+    const details =
+      err instanceof Error
+        ? `${err.name}: ${err.message}`
+        : typeof err === 'string'
+        ? err
+        : JSON.stringify(err);
+    const message = details ? `${prefix} ${details}` : prefix;
+    console.error(prefix, err);
+    setError(message);
+    onError(message);
+  };
 
   useEffect(() => {
-    startRecording();
+    startPromiseRef.current = startRecording();
     timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
+
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
     };
   }, []);
 
   const startRecording = async () => {
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
-      if (!granted) {
-        const msg = 'Microphone permission denied. Enable it in Settings.';
+      setError(null);
+
+      const permission = await Audio.requestPermissionsAsync();
+      console.log('Audio.requestPermissionsAsync result', permission);
+
+      if (!permission.granted) {
+        const msg =
+          'Microphone access is off. Open Android Settings > Apps > NoteKeeper > Permissions and enable Microphone, then try again.';
         setError(msg);
         onError(msg);
         return;
       }
+
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
       });
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      console.log('Audio mode configured for recording');
+
+      const { recording } = await Audio.Recording.createAsync(recordingOptions);
+      console.log('Audio recording created successfully', { callMode, target });
       recordingRef.current = recording;
-    } catch (e: any) {
-      console.error('Could not start recording', e);
-      const msg = 'Could not start recording: ' + e.message;
-      setError(msg);
-      onError(msg);
+    } catch (e: unknown) {
+      reportError('Could not start recording.', e);
     }
   };
 
   const stopRecording = async () => {
     if (stopping) return;
-    if (timerRef.current) clearInterval(timerRef.current);
+
     setStopping(true);
+    setError(null);
     onBeginProcessing();
     console.log('Stop recording tapped');
 
+    if (startPromiseRef.current) {
+      await startPromiseRef.current;
+    }
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
     try {
       if (!recordingRef.current) {
-        // Recording never started (start failed or was denied) — just go back
-        onError('Recording could not start. Please try again.');
+        setStopping(false);
         return;
       }
 
@@ -79,11 +142,8 @@ export default function RecordingScreen({ callMode, onBeginProcessing, onError, 
       }
 
       onComplete(uri);
-    } catch (e: any) {
-      const message = 'Error stopping recording: ' + e.message;
-      console.error('Error stopping recording', e);
-      setError(message);
-      onError(message);
+    } catch (e: unknown) {
+      reportError('Error stopping recording.', e);
       setStopping(false);
     }
   };
@@ -100,7 +160,9 @@ export default function RecordingScreen({ callMode, onBeginProcessing, onError, 
         </Text>
       </View>
 
-      <Text style={styles.timer}>{mm}:{ss}</Text>
+      <Text style={styles.timer}>
+        {mm}:{ss}
+      </Text>
 
       <View style={styles.waveform}>
         {[...Array(18)].map((_, i) => (
@@ -120,15 +182,20 @@ export default function RecordingScreen({ callMode, onBeginProcessing, onError, 
         <Text style={styles.error}>{error}</Text>
       ) : (
         <View style={styles.actionArea}>
-          {stopping && <View style={styles.spinner} />}
-          <TouchableOpacity
-            style={[styles.stopBtn, stopping && styles.stopBtnDisabled]}
-            onPress={stopRecording}
-            activeOpacity={0.8}
-            disabled={stopping}
-          >
-            <Text style={styles.stopIcon}>{stopping ? '...' : '■'}</Text>
-          </TouchableOpacity>
+          {stopping ? (
+            <View style={styles.processingWrap}>
+              <ActivityIndicator size="large" color={COLORS.brown} />
+              <Text style={styles.processingText}>Saving recording...</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.stopBtn}
+              onPress={stopRecording}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.stopIcon}>Stop</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -136,8 +203,8 @@ export default function RecordingScreen({ callMode, onBeginProcessing, onError, 
         {stopping
           ? 'One moment while the recording is saved.'
           : callMode
-          ? 'Listening through the speaker · tap to stop'
-          : 'Tap to stop · keeps recording if you switch apps'}
+          ? 'Listening through the speaker, tap to stop.'
+          : 'Tap to stop. Recording continues if you switch apps.'}
       </Text>
     </View>
   );
@@ -191,14 +258,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 160,
   },
-  spinner: {
-    position: 'absolute',
-    width: 132,
-    height: 132,
-    borderRadius: 66,
-    borderWidth: 2,
-    borderColor: COLORS.border,
-    borderTopColor: COLORS.brown,
+  processingWrap: {
+    minHeight: 124,
+    minWidth: 124,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  processingText: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.brown,
   },
   stopBtn: {
     width: 124,
@@ -213,11 +282,9 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 5,
   },
-  stopBtnDisabled: {
-    opacity: 0.9,
-  },
   stopIcon: {
-    fontSize: 32,
+    fontSize: 24,
+    fontWeight: '600',
     color: '#fff',
   },
   hint: {
@@ -230,5 +297,7 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.sm,
     color: COLORS.red,
     textAlign: 'center',
+    maxWidth: 320,
+    lineHeight: 20,
   },
 });

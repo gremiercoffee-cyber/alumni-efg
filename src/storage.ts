@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FolderNode, Note, AppSettings, SavedLink, TodoList } from './types';
+import { FolderNode, Note, AppSettings, KeeperItem, TodoList } from './types';
 
 const KEY = 'notekeeper:state:v2';
 const SETTINGS_KEY = 'notekeeper:settings:v1';
@@ -9,7 +9,15 @@ interface AppState {
   tree?: FolderNode;
   keeperTree?: FolderNode;
   notes?: Note[];
-  savedLinks?: SavedLink[];
+  keeperItems?: KeeperItem[];
+  savedLinks?: Array<{
+    id: string;
+    url: string;
+    title: string;
+    summary: string;
+    categoryId: string;
+    ts: number;
+  }>;
   todoLists?: TodoList[];
   settings?: Partial<AppSettings>;
 }
@@ -51,6 +59,7 @@ export async function loadAppState(): Promise<AppState | null> {
 
     return {
       ...state,
+      keeperItems: state.keeperItems || migrateLegacyLinks(state.savedLinks || []),
       settings: mergeNonEmptySettings(recoveredSettings, state.settings || {}),
     };
   } catch (e) {
@@ -83,4 +92,26 @@ function mergeNonEmptySettings(
     }
   });
   return merged;
+}
+
+function migrateLegacyLinks(
+  savedLinks: Array<{
+    id: string;
+    url: string;
+    title: string;
+    summary: string;
+    categoryId: string;
+    ts: number;
+  }>
+): KeeperItem[] {
+  return savedLinks.map(link => ({
+    id: link.id,
+    kind: 'link',
+    text: link.summary,
+    url: link.url,
+    title: link.title,
+    summary: link.summary,
+    categoryId: link.categoryId,
+    ts: link.ts,
+  }));
 }

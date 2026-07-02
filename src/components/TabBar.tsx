@@ -2,7 +2,7 @@ import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { COLORS } from '../constants';
 
-type Tab = 'home' | 'folders' | 'keeper' | 'actions' | 'todos' | 'settings';
+type Tab = 'home' | 'notes' | 'keeper' | 'actions' | 'todos' | 'settings';
 
 interface Props {
   active: Tab;
@@ -11,7 +11,7 @@ interface Props {
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'home', label: 'Home', icon: 'H' },
-  { id: 'folders', label: 'Folders', icon: 'F' },
+  { id: 'notes', label: 'Notes', icon: 'N' },
   { id: 'keeper', label: 'Keeper', icon: 'K' },
   { id: 'actions', label: 'Actions', icon: 'A' },
   { id: 'todos', label: 'To-Dos', icon: 'T' },

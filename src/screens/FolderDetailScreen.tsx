@@ -29,7 +29,7 @@ export default function FolderDetailScreen({ folder, notes, onBack }: Props) {
 
   return (
     <View style={styles.container}>
-      <TopBar subtitle="Folder" title={folder.name} onBack={onBack} />
+      <TopBar subtitle="Notes" title={folder.name} onBack={onBack} />
 
       {folder.children.length > 0 && (
         <View style={styles.subfolderRow}>
@@ -43,7 +43,7 @@ export default function FolderDetailScreen({ folder, notes, onBack }: Props) {
 
       <ScrollView contentContainerStyle={styles.content}>
         {folderNotes.length === 0 ? (
-          <Text style={styles.empty}>No notes in this folder yet.</Text>
+          <Text style={styles.empty}>No notes in this category yet.</Text>
         ) : (
           folderNotes.map(n => (
             <View key={n.id} style={styles.noteCard}>

@@ -79,3 +79,30 @@ export function extractFirstUrl(text: string): string | null {
   const match = text.match(/https?:\/\/[^\s<>"']+/i);
   return match ? match[0].replace(/[),.;!?]+$/, '') : null;
 }
+
+export function classifyDueBucket(due: string | null): 'today' | 'soon' | 'later' | null {
+  if (!due) return null;
+  const value = due.toLowerCase();
+  if (
+    value.includes('today') ||
+    value.includes('tonight') ||
+    value.includes('this morning') ||
+    value.includes('this afternoon') ||
+    value.includes('this evening')
+  ) {
+    return 'today';
+  }
+  if (
+    value.includes('tomorrow') ||
+    value.includes('mon ') ||
+    value.includes('tue ') ||
+    value.includes('wed ') ||
+    value.includes('thu ') ||
+    value.includes('fri ') ||
+    value.includes('sat ') ||
+    value.includes('sun ')
+  ) {
+    return 'soon';
+  }
+  return 'later';
+}

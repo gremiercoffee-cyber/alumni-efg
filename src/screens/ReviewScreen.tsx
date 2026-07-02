@@ -56,7 +56,7 @@ export default function ReviewScreen({
           <SpeakButton text={`${pending.title}. ${pending.summary}`} />
         </View>
 
-        <Text style={styles.sectionLabel}>{isTodo ? 'TO-DO FOLDER' : 'FILED UNDER'}</Text>
+        <Text style={styles.sectionLabel}>{isTodo ? 'TO-DO CATEGORY' : 'NOTE CATEGORY'}</Text>
         <View style={styles.folderPill}>
           <Text style={styles.folderPillText}>{suggestedLabel}</Text>
         </View>
@@ -72,7 +72,7 @@ export default function ReviewScreen({
 
         {allFolders.length > 1 && (
           <>
-            <Text style={[styles.sectionLabel, { marginTop: 12 }]}>CHOOSE FOLDER</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 12 }]}>CHOOSE CATEGORY</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.folderScroll}>
               {allFolders.slice(1).map(f => (
                 <TouchableOpacity

@@ -23,7 +23,7 @@ const SECTIONS: { key: keyof AppSettings; label: string; placeholder: string }[]
   {
     key: 'areas',
     label: 'Main areas of my life',
-    placeholder: 'e.g. Work, family, health, errands, projects. These can become your top-level folders.',
+    placeholder: 'e.g. Work, family, health, errands, projects. These can become your top-level note categories.',
   },
   {
     key: 'schedule',

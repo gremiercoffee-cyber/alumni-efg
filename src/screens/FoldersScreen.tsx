@@ -77,19 +77,19 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
 
   return (
     <View style={styles.container}>
-      <TopBar subtitle="Browse" title="Folders" />
+      <TopBar subtitle="Browse" title="Notes" />
 
       {tree.children.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.empty}>
-            No folders yet. They&apos;ll appear here as you record notes, or you can create one now.
+            No notes yet. They&apos;ll appear here as you record notes, or you can create a category now.
           </Text>
           <TouchableOpacity
             style={styles.primaryBtn}
             onPress={() => setModalVisible(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.primaryBtnText}>Create folder</Text>
+            <Text style={styles.primaryBtnText}>Create category</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -100,7 +100,7 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
               onPress={() => setModalVisible(true)}
               activeOpacity={0.8}
             >
-              <Text style={styles.primaryBtnText}>New folder</Text>
+              <Text style={styles.primaryBtnText}>New category</Text>
             </TouchableOpacity>
           </View>
 
@@ -129,10 +129,10 @@ export default function FoldersScreen({ tree, notes, onOpenFolder, onAddFolder }
       <Modal visible={modalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>New folder</Text>
+            <Text style={styles.modalTitle}>New category</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="Folder name"
+              placeholder="Category name"
               placeholderTextColor={COLORS.brownFaint}
               value={nameInput}
               onChangeText={setNameInput}
