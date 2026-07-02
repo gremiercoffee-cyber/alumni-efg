@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
-    paddingTop: 8,
+    paddingTop: 24,
     paddingBottom: 24,
     gap: 14,
   },
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   callBtnText: { fontSize: FONTS.size.xs, color: COLORS.brownLight },
-  recentScroll: { flex: 0.95 },
+  recentScroll: { flex: 0.78 },
   recentContent: { paddingHorizontal: 20, paddingBottom: 16 },
   sectionLabel: {
     fontSize: FONTS.size.xs,
