@@ -34,7 +34,9 @@ export default function RecordingScreen({ callMode, onBeginProcessing, onError, 
     try {
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
-        setError('Microphone permission denied. Enable it in Android Settings.');
+        const msg = 'Microphone permission denied. Enable it in Settings.';
+        setError(msg);
+        onError(msg);
         return;
       }
       await Audio.setAudioModeAsync({
@@ -47,7 +49,9 @@ export default function RecordingScreen({ callMode, onBeginProcessing, onError, 
       recordingRef.current = recording;
     } catch (e: any) {
       console.error('Could not start recording', e);
-      setError('Could not start recording: ' + e.message);
+      const msg = 'Could not start recording: ' + e.message;
+      setError(msg);
+      onError(msg);
     }
   };
 
@@ -60,7 +64,9 @@ export default function RecordingScreen({ callMode, onBeginProcessing, onError, 
 
     try {
       if (!recordingRef.current) {
-        throw new Error('No active recording found.');
+        // Recording never started (start failed or was denied) — just go back
+        onError('Recording could not start. Please try again.');
+        return;
       }
 
       console.log('Stopping and unloading recording');
