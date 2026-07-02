@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
+  Image,
   View,
   Text,
   TouchableOpacity,
@@ -19,6 +21,7 @@ interface Props {
   items: KeeperItem[];
   processing: boolean;
   error: string | null;
+  onDeleteItem: (itemId: string) => void;
   onAddText: (text: string) => void;
   onRecord: () => void;
 }
@@ -28,18 +31,28 @@ export default function KeeperScreen({
   items,
   processing,
   error,
+  onDeleteItem,
   onAddText,
   onRecord,
 }: Props) {
   const [modalVisible, setModalVisible] = useState(false);
   const [draft, setDraft] = useState('');
+  const [brokenFavicons, setBrokenFavicons] = useState<Record<string, boolean>>({});
   const categories = flattenFolders(keeperTree);
-  const grouped = useMemo(() => {
-    return items.reduce<Record<string, KeeperItem[]>>((acc, item) => {
-      if (!acc[item.categoryId]) acc[item.categoryId] = [];
-      acc[item.categoryId].push(item);
+  const itemCategoryLabels = useMemo(() => {
+    return items.reduce<Record<string, string>>((acc, item) => {
+      acc[item.id] = folderPathLabel(item.categoryId, categories);
       return acc;
     }, {});
+  }, [items]);
+  const columns = useMemo(() => {
+    return items.reduce<[KeeperItem[], KeeperItem[]]>(
+      (acc, item, index) => {
+        acc[index % 2].push(item);
+        return acc;
+      },
+      [[], []]
+    );
   }, [items]);
 
   const submitText = () => {
@@ -48,6 +61,31 @@ export default function KeeperScreen({
     onAddText(text);
     setDraft('');
     setModalVisible(false);
+  };
+
+  const confirmDelete = (item: KeeperItem) => {
+    Alert.alert('Remove from Keeper?', item.title, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => onDeleteItem(item.id),
+      },
+    ]);
+  };
+
+  const getDomain = (url: string | null) => {
+    if (!url) return null;
+    try {
+      return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      return url;
+    }
+  };
+
+  const getFaviconUri = (url: string | null) => {
+    const domain = getDomain(url);
+    return domain ? `https://www.google.com/s2/favicons?sz=64&domain=${domain}` : null;
   };
 
   return (
@@ -83,32 +121,71 @@ export default function KeeperScreen({
             Add a link, a quick thought, or a dictated keep note and it will stay here by category.
           </Text>
         ) : (
-          Object.entries(grouped).map(([categoryId, categoryItems]) => (
-            <View key={categoryId} style={styles.group}>
-              <Text style={styles.groupLabel}>
-                {folderPathLabel(categoryId, categories)}
-              </Text>
-              {categoryItems.map(item => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.itemCard}
-                  activeOpacity={item.url ? 0.75 : 1}
-                  onPress={() => {
-                    if (item.url) {
-                      Linking.openURL(item.url);
-                    }
-                  }}
-                >
-                  <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
-                  <Text style={styles.itemSummary} numberOfLines={3}>{item.summary}</Text>
-                  <Text style={styles.itemMeta} numberOfLines={1}>
-                    {formatDate(item.ts)}
-                    {item.url ? ` - ${item.url}` : ' - kept note'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ))
+          <View style={styles.grid}>
+            {columns.map((column, columnIndex) => (
+              <View key={`column-${columnIndex}`} style={styles.column}>
+                {column.map(item => {
+                  const domain = getDomain(item.url);
+                  const faviconUri = getFaviconUri(item.url);
+                  const showFavicon = !!faviconUri && !brokenFavicons[item.id];
+
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.itemCard}
+                      activeOpacity={item.url ? 0.75 : 1}
+                      onPress={() => {
+                        if (item.url) {
+                          Linking.openURL(item.url);
+                        }
+                      }}
+                      onLongPress={() => confirmDelete(item)}
+                      delayLongPress={280}
+                    >
+                      <TouchableOpacity
+                        style={styles.deleteBtn}
+                        onPress={() => confirmDelete(item)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={styles.deleteBtnText}>×</Text>
+                      </TouchableOpacity>
+
+                      <View style={styles.cardTopRow}>
+                        {showFavicon ? (
+                          <Image
+                            source={{ uri: faviconUri }}
+                            style={styles.favicon}
+                            onError={() =>
+                              setBrokenFavicons(current => ({ ...current, [item.id]: true }))
+                            }
+                          />
+                        ) : (
+                          <View style={styles.domainBadge}>
+                            <Text style={styles.domainBadgeText} numberOfLines={1}>
+                              {domain || 'Note'}
+                            </Text>
+                          </View>
+                        )}
+                        <View style={styles.categoryPill}>
+                          <Text style={styles.categoryPillText} numberOfLines={1}>
+                            {itemCategoryLabels[item.id]}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.itemTitle} numberOfLines={3}>{item.title}</Text>
+                      <Text style={styles.itemSummary} numberOfLines={4}>
+                        {item.summary || item.text}
+                      </Text>
+                      <Text style={styles.itemMeta} numberOfLines={1}>
+                        {domain || 'Kept note'} · {formatDate(item.ts)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
         )}
       </ScrollView>
 
@@ -224,37 +301,94 @@ const styles = StyleSheet.create({
     color: '#7a3a22',
     textAlign: 'center',
   },
-  group: { marginBottom: 20 },
-  groupLabel: {
-    fontSize: FONTS.size.xs,
-    color: COLORS.brownLight,
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
-    marginBottom: 8,
+  grid: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginTop: 4,
+  },
+  column: {
+    flex: 1,
   },
   itemCard: {
     backgroundColor: COLORS.white50,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
-    borderRadius: 8,
+    borderRadius: 14,
     padding: 12,
-    marginBottom: 8,
+    marginBottom: 12,
+    minHeight: 148,
+    position: 'relative',
+  },
+  deleteBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(94, 70, 59, 0.08)',
+    zIndex: 2,
+  },
+  deleteBtnText: {
+    fontSize: 16,
+    lineHeight: 18,
+    color: COLORS.brownLight,
+    fontWeight: '600',
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 28,
+    marginBottom: 10,
+  },
+  favicon: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+  },
+  domainBadge: {
+    maxWidth: 92,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: COLORS.cream,
+  },
+  domainBadgeText: {
+    fontSize: 11,
+    color: COLORS.brown,
+  },
+  categoryPill: {
+    flex: 1,
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(123, 93, 72, 0.1)',
+  },
+  categoryPillText: {
+    fontSize: 11,
+    color: COLORS.brownLight,
   },
   itemTitle: {
     fontSize: FONTS.size.md,
     fontWeight: '600',
     color: COLORS.brown,
+    paddingRight: 18,
   },
   itemSummary: {
     fontSize: FONTS.size.xs,
     color: COLORS.brownLight,
-    marginTop: 4,
+    marginTop: 6,
     lineHeight: 17,
   },
   itemMeta: {
     fontSize: FONTS.size.xs,
     color: COLORS.brownFaint,
-    marginTop: 6,
+    marginTop: 10,
   },
   modalOverlay: {
     flex: 1,

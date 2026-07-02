@@ -285,6 +285,10 @@ export default function App() {
     }
   };
 
+  const deleteKeeperItem = (itemId: string) => {
+    setKeeperItems(items => items.filter(item => item.id !== itemId));
+  };
+
   const startRecording = () => {
     setCaptureTarget('general');
     setCallMode(false);
@@ -822,6 +826,7 @@ export default function App() {
         items={keeperItems}
         processing={keeperProcessing}
         error={error}
+        onDeleteItem={deleteKeeperItem}
         onAddText={text => {
           saveKeeperItem(text, null);
         }}
