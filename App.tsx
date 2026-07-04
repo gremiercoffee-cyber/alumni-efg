@@ -77,6 +77,12 @@ interface ReminderQueueItem {
   suggestedDue: string | null;
 }
 
+type TodoExpandState = {
+  folders: Record<string, boolean>;
+  lists: Record<string, boolean>;
+  completed: Record<string, boolean>;
+};
+
 function sharedTextFromUrl(url: string): string | null {
   const match = url.match(/[?&]text=([^&]+)/);
   return match ? decodeURIComponent(match[1].replace(/\+/g, '%20')) : null;
@@ -129,6 +135,11 @@ export default function App() {
   const [todoFocusListId, setTodoFocusListId] = useState<string | null>(null);
   const [reminderQueue, setReminderQueue] = useState<ReminderQueueItem[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [todoExpandState, setTodoExpandState] = useState<TodoExpandState>({
+    folders: {},
+    lists: {},
+    completed: {},
+  });
   const handledShareUrls = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -970,6 +981,8 @@ export default function App() {
         todoLists={todoLists}
         focusedFolderId={todoFocusFolderId}
         focusedListId={todoFocusListId}
+        expandState={todoExpandState}
+        onExpandStateChange={setTodoExpandState}
         onToggle={toggleTodoItem}
         onAddItem={addManualTodoItem}
         onEditReminder={beginReminderEdit}

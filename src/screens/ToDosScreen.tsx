@@ -15,11 +15,19 @@ import { COLORS, FONTS, TODO_CATEGORY_PALETTE } from '../constants';
 import { formatReminderLabel, tintColor } from '../utils';
 import { FolderNode, TodoItem, TodoList } from '../types';
 
+type ExpandState = {
+  folders: Record<string, boolean>;
+  lists: Record<string, boolean>;
+  completed: Record<string, boolean>;
+};
+
 interface Props {
   tree: FolderNode;
   todoLists: TodoList[];
   focusedFolderId?: string | null;
   focusedListId?: string | null;
+  expandState: ExpandState;
+  onExpandStateChange: React.Dispatch<React.SetStateAction<ExpandState>>;
   onToggle: (listId: string, itemId: string) => void;
   onAddItem: (listId: string, text: string) => void;
   onEditReminder: (listId: string, itemId: string) => void;
@@ -36,6 +44,12 @@ interface Props {
 function collectFolderIds(node: FolderNode, ids = new Set<string>()): Set<string> {
   ids.add(node.id);
   node.children.forEach(child => collectFolderIds(child, ids));
+  return ids;
+}
+
+function collectFolderIdsArray(node: FolderNode, ids: string[] = []): string[] {
+  ids.push(node.id);
+  node.children.forEach(child => collectFolderIdsArray(child, ids));
   return ids;
 }
 
@@ -276,10 +290,10 @@ function TodoListSection({
             </TouchableOpacity>
           )}
           <Text style={styles.listMeta}>
-            {activeItems.length} open{completedItems.length ? ` · ${completedItems.length} done` : ''}
+            {activeItems.length} open{completedItems.length ? ` | ${completedItems.length} done` : ''}
           </Text>
         </View>
-        <Text style={styles.chevron}>{expanded ? '−' : '+'}</Text>
+        <Text style={styles.chevron}>{expanded ? '-' : '+'}</Text>
       </TouchableOpacity>
 
       {expanded ? (
@@ -313,7 +327,7 @@ function TodoListSection({
               value={draft}
               onChangeText={setDraft}
               onSubmitEditing={submit}
-              placeholder="Add an item…"
+              placeholder="Add an item..."
               placeholderTextColor={COLORS.brownFaint}
               returnKeyType="done"
               blurOnSubmit={false}
@@ -401,9 +415,9 @@ function FolderSection({
   expandedFolders,
   expandedLists,
   expandedCompleted,
-  setExpandedFolders,
-  setExpandedLists,
-  setExpandedCompleted,
+  onExpandedFoldersChange,
+  onExpandedListsChange,
+  onExpandedCompletedChange,
   onToggle,
   onAddItem,
   onEditReminder,
@@ -423,9 +437,9 @@ function FolderSection({
   expandedFolders: Record<string, boolean>;
   expandedLists: Record<string, boolean>;
   expandedCompleted: Record<string, boolean>;
-  setExpandedFolders: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  setExpandedLists: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  setExpandedCompleted: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  onExpandedFoldersChange: (updater: (current: Record<string, boolean>) => Record<string, boolean>) => void;
+  onExpandedListsChange: (updater: (current: Record<string, boolean>) => Record<string, boolean>) => void;
+  onExpandedCompletedChange: (updater: (current: Record<string, boolean>) => Record<string, boolean>) => void;
   onToggle: (listId: string, itemId: string) => void;
   onAddItem: (listId: string, text: string) => void;
   onEditReminder: (listId: string, itemId: string) => void;
@@ -446,7 +460,7 @@ function FolderSection({
   const openCount = todoLists
     .filter(list => descendantIds.includes(list.folderId))
     .reduce((sum, list) => sum + list.items.filter(item => !item.done).length, 0);
-  const expanded = expandedFolders[folder.id] ?? true;
+  const expanded = expandedFolders[folder.id] ?? false;
   const isFocused = focusedFolderId === folder.id;
   const [actionsOpen, setActionsOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -468,9 +482,9 @@ function FolderSection({
       <TouchableOpacity
         style={styles.folderHeader}
         onPress={() =>
-          setExpandedFolders(current => ({
+          onExpandedFoldersChange(current => ({
             ...current,
-            [folder.id]: !(current[folder.id] ?? true),
+            [folder.id]: !(current[folder.id] ?? false),
           }))
         }
         onLongPress={() => {
@@ -486,10 +500,10 @@ function FolderSection({
             <Text style={styles.folderTitle}>{folder.name}</Text>
           </View>
           <Text style={styles.folderMeta}>
-            {openCount} open{listsInFolder.length ? ` · ${listsInFolder.length} list${listsInFolder.length === 1 ? '' : 's'}` : ''}
+            {openCount} open{listsInFolder.length ? ` | ${listsInFolder.length} list${listsInFolder.length === 1 ? '' : 's'}` : ''}
           </Text>
         </View>
-        <Text style={styles.chevron}>{expanded ? '−' : '+'}</Text>
+        <Text style={styles.chevron}>{expanded ? '-' : '+'}</Text>
       </TouchableOpacity>
 
       {expanded ? (
@@ -499,11 +513,11 @@ function FolderSection({
               key={list.id}
               list={list}
               focused={focusedListId === list.id}
-              expanded={expandedLists[list.id] ?? true}
+              expanded={expandedLists[list.id] ?? false}
               onToggleExpanded={() =>
-                setExpandedLists(current => ({
+                onExpandedListsChange(current => ({
                   ...current,
-                  [list.id]: !(current[list.id] ?? true),
+                  [list.id]: !(current[list.id] ?? false),
                 }))
               }
               onToggle={onToggle}
@@ -517,7 +531,7 @@ function FolderSection({
               accentColor={accentColor}
               completedExpanded={!!expandedCompleted[list.id]}
               onToggleCompletedExpanded={() =>
-                setExpandedCompleted(current => ({
+                onExpandedCompletedChange(current => ({
                   ...current,
                   [list.id]: !current[list.id],
                 }))
@@ -535,9 +549,9 @@ function FolderSection({
                 expandedFolders={expandedFolders}
                 expandedLists={expandedLists}
                 expandedCompleted={expandedCompleted}
-                setExpandedFolders={setExpandedFolders}
-                setExpandedLists={setExpandedLists}
-                setExpandedCompleted={setExpandedCompleted}
+                onExpandedFoldersChange={onExpandedFoldersChange}
+                onExpandedListsChange={onExpandedListsChange}
+                onExpandedCompletedChange={onExpandedCompletedChange}
                 onToggle={onToggle}
                 onAddItem={onAddItem}
                 onEditReminder={onEditReminder}
@@ -632,6 +646,8 @@ export default function ToDosScreen({
   todoLists,
   focusedFolderId = null,
   focusedListId = null,
+  expandState,
+  onExpandStateChange,
   onToggle,
   onAddItem,
   onEditReminder,
@@ -644,53 +660,55 @@ export default function ToDosScreen({
   onRenameCategory,
   onChangeCategoryColor,
 }: Props) {
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
-  const [expandedLists, setExpandedLists] = useState<Record<string, boolean>>({});
-  const [expandedCompleted, setExpandedCompleted] = useState<Record<string, boolean>>({});
+  const expandedFolders = expandState.folders;
+  const expandedLists = expandState.lists;
+  const expandedCompleted = expandState.completed;
   const rootLists = todoLists.filter(list => list.folderId === 'root');
   const visibleFolders = tree.children.filter(folder =>
     todoLists.some(list => collectFolderIds(folder).has(list.folderId))
   );
   const openCount = countOpenItems(todoLists);
 
-  useEffect(() => {
-    setExpandedFolders(current => {
-      const next = { ...current };
-      tree.children.forEach(folder => {
-        if (next[folder.id] === undefined) {
-          next[folder.id] = true;
-        }
-      });
-      return next;
-    });
-  }, [tree]);
+  const visibleFolderIds = useMemo(
+    () => visibleFolders.flatMap(folder => collectFolderIdsArray(folder)),
+    [visibleFolders]
+  );
+  const visibleListIds = useMemo(
+    () =>
+      todoLists
+        .filter(list => list.folderId === 'root' || visibleFolderIds.includes(list.folderId))
+        .map(list => list.id),
+    [todoLists, visibleFolderIds]
+  );
 
-  useEffect(() => {
-    setExpandedLists(current => {
-      const next = { ...current };
-      todoLists.forEach(list => {
-        if (next[list.id] === undefined) {
-          next[list.id] = true;
-        }
-      });
-      return next;
-    });
-  }, [todoLists]);
+  const updateExpandedFolders = (updater: (current: Record<string, boolean>) => Record<string, boolean>) => {
+    onExpandStateChange(current => ({ ...current, folders: updater(current.folders) }));
+  };
+
+  const updateExpandedLists = (updater: (current: Record<string, boolean>) => Record<string, boolean>) => {
+    onExpandStateChange(current => ({ ...current, lists: updater(current.lists) }));
+  };
+
+  const updateExpandedCompleted = (updater: (current: Record<string, boolean>) => Record<string, boolean>) => {
+    onExpandStateChange(current => ({ ...current, completed: updater(current.completed) }));
+  };
 
   useEffect(() => {
     if (focusedFolderId) {
-      setExpandedFolders(current => ({ ...current, [focusedFolderId]: true }));
+      updateExpandedFolders(current => ({ ...current, [focusedFolderId]: true }));
     }
     if (focusedListId) {
-      setExpandedLists(current => ({ ...current, [focusedListId]: true }));
+      updateExpandedLists(current => ({ ...current, [focusedListId]: true }));
     }
   }, [focusedFolderId, focusedListId]);
 
-  const allCollapsed = visibleFolders.every(folder => !(expandedFolders[folder.id] ?? true));
+  const allCollapsed =
+    visibleFolderIds.every(folderId => !(expandedFolders[folderId] ?? false)) &&
+    visibleListIds.every(listId => !(expandedLists[listId] ?? false));
 
   return (
     <View style={styles.container}>
-      <TopBar subtitle="Category → list → items" title="To-Dos" />
+      <TopBar subtitle="Category -> list -> items" title="To-Dos" />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.toolbar}>
           <View style={styles.toolbarTextWrap}>
@@ -700,12 +718,22 @@ export default function ToDosScreen({
           <TouchableOpacity
             style={styles.toolbarBtn}
             onPress={() =>
-              setExpandedFolders(current => {
-                const next: Record<string, boolean> = { ...current };
-                visibleFolders.forEach(folder => {
-                  next[folder.id] = allCollapsed;
+              onExpandStateChange(current => {
+                const nextFolders = { ...current.folders };
+                const nextLists = { ...current.lists };
+                const nextCompleted = { ...current.completed };
+                visibleFolderIds.forEach(folderId => {
+                  nextFolders[folderId] = allCollapsed;
                 });
-                return next;
+                visibleListIds.forEach(listId => {
+                  nextLists[listId] = allCollapsed;
+                  if (!allCollapsed) nextCompleted[listId] = true;
+                });
+                return {
+                  folders: nextFolders,
+                  lists: nextLists,
+                  completed: nextCompleted,
+                };
               })
             }
             activeOpacity={0.85}
@@ -728,11 +756,11 @@ export default function ToDosScreen({
                     key={list.id}
                     list={list}
                     focused={focusedListId === list.id}
-                    expanded={expandedLists[list.id] ?? true}
+                    expanded={expandedLists[list.id] ?? false}
                     onToggleExpanded={() =>
-                      setExpandedLists(current => ({
+                      updateExpandedLists(current => ({
                         ...current,
-                        [list.id]: !(current[list.id] ?? true),
+                        [list.id]: !(current[list.id] ?? false),
                       }))
                     }
                     onToggle={onToggle}
@@ -746,7 +774,7 @@ export default function ToDosScreen({
                     accentColor={null}
                     completedExpanded={!!expandedCompleted[list.id]}
                     onToggleCompletedExpanded={() =>
-                      setExpandedCompleted(current => ({
+                      updateExpandedCompleted(current => ({
                         ...current,
                         [list.id]: !current[list.id],
                       }))
@@ -766,9 +794,9 @@ export default function ToDosScreen({
                 expandedFolders={expandedFolders}
                 expandedLists={expandedLists}
                 expandedCompleted={expandedCompleted}
-                setExpandedFolders={setExpandedFolders}
-                setExpandedLists={setExpandedLists}
-                setExpandedCompleted={setExpandedCompleted}
+                onExpandedFoldersChange={updateExpandedFolders}
+                onExpandedListsChange={updateExpandedLists}
+                onExpandedCompletedChange={updateExpandedCompleted}
                 onToggle={onToggle}
                 onAddItem={onAddItem}
                 onEditReminder={onEditReminder}

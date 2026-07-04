@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   PanResponder,
   ScrollView,
   StyleSheet,
@@ -34,7 +35,9 @@ interface Props {
 }
 
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
-const HOUR_HEIGHT = 76;
+const HOUR_HEIGHT = 60;
+const SNAP_MINUTES = 15;
+const DEFAULT_SCROLL_HOUR = 7;
 
 export default function CalendarScreen({ todoTree, events, onOpenEvent, onRescheduleEvent }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('day');
@@ -225,42 +228,93 @@ function DayView({
   onOpenEvent: (event: CalendarEvent) => void;
   onRescheduleEvent: (eventId: string, startAt: number, endAt: number, allDay: boolean) => void;
 }) {
-  const dragRef = useRef<{ eventId: string | null; startY: number; originalStart: number; duration: number }>({
+  const scrollRef = useRef<ScrollView | null>(null);
+  const dragOffsetY = useRef(new Animated.Value(0)).current;
+  const dragRef = useRef<{ eventId: string | null; originalStart: number; duration: number }>({
     eventId: null,
-    startY: 0,
     originalStart: 0,
     duration: 0,
   });
   const [draggingEventId, setDraggingEventId] = useState<string | null>(null);
+  const [previewStartTimes, setPreviewStartTimes] = useState<Record<string, number>>({});
+
+  const snapDeltaToMinutes = (deltaY: number) => {
+    const deltaMinutes = (deltaY / HOUR_HEIGHT) * 60;
+    return Math.round(deltaMinutes / SNAP_MINUTES) * SNAP_MINUTES;
+  };
+
+  const topForTimestamp = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return (date.getHours() + date.getMinutes() / 60) * HOUR_HEIGHT;
+  };
+
+  useEffect(() => {
+    const now = new Date();
+    const selectedHour = sameDay(day, now)
+      ? Math.max(now.getHours() + now.getMinutes() / 60, DEFAULT_SCROLL_HOUR)
+      : DEFAULT_SCROLL_HOUR;
+    const targetY = Math.max(selectedHour * HOUR_HEIGHT - 4.5 * HOUR_HEIGHT, 0);
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: targetY, animated: false });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [day]);
+
+  const resetDrag = (eventId?: string | null) => {
+    dragOffsetY.setValue(0);
+    if (eventId) {
+      setPreviewStartTimes(current => {
+        const next = { ...current };
+        delete next[eventId];
+        return next;
+      });
+    }
+    dragRef.current = { eventId: null, originalStart: 0, duration: 0 };
+    setDraggingEventId(null);
+  };
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dy) > 8,
+        onStartShouldSetPanResponder: () => !!dragRef.current.eventId,
+        onMoveShouldSetPanResponder: (_, gesture) => !!dragRef.current.eventId && Math.abs(gesture.dy) > 2,
+        onPanResponderMove: (_, gesture) => {
+          if (!dragRef.current.eventId) return;
+          const snappedMinutes = snapDeltaToMinutes(gesture.dy);
+          const snappedY = (snappedMinutes / 60) * HOUR_HEIGHT;
+          const nextStart = dragRef.current.originalStart + snappedMinutes * 60 * 1000;
+          dragOffsetY.setValue(snappedY);
+          setPreviewStartTimes(current => ({
+            ...current,
+            [dragRef.current.eventId as string]: nextStart,
+          }));
+        },
+        onPanResponderTerminationRequest: () => false,
         onPanResponderRelease: (_, gesture) => {
           if (!dragRef.current.eventId) return;
-          const hoursDelta = Math.round(gesture.dy / (HOUR_HEIGHT / 2)) / 2;
-          const nextStart = dragRef.current.originalStart + hoursDelta * 60 * 60 * 1000;
-          const start = new Date(nextStart);
-          if (startOfDay(start).getTime() !== startOfDay(day).getTime()) {
+          const { eventId, originalStart, duration } = dragRef.current;
+          const snappedMinutes = snapDeltaToMinutes(gesture.dy);
+          const nextStart = originalStart + snappedMinutes * 60 * 1000;
+          const nextEnd = nextStart + duration;
+          const nextStartDate = new Date(nextStart);
+          const nextEndDate = new Date(nextEnd);
+          resetDrag(eventId);
+          if (
+            startOfDay(nextStartDate).getTime() !== startOfDay(day).getTime() ||
+            startOfDay(nextEndDate).getTime() !== startOfDay(day).getTime()
+          ) {
             Alert.alert('Keep this in the current day', 'Drag within the visible day to reschedule the event.');
-          } else {
-            onRescheduleEvent(
-              dragRef.current.eventId,
-              nextStart,
-              nextStart + dragRef.current.duration,
-              false
-            );
+            return;
           }
-          dragRef.current = { eventId: null, startY: 0, originalStart: 0, duration: 0 };
-          setDraggingEventId(null);
+          onRescheduleEvent(eventId, nextStart, nextEnd, false);
         },
+        onPanResponderTerminate: () => resetDrag(dragRef.current.eventId),
       }),
     [day, onRescheduleEvent]
   );
 
   return (
-    <ScrollView style={styles.dayScroll} contentContainerStyle={styles.dayContent}>
+    <ScrollView ref={scrollRef} style={styles.dayScroll} contentContainerStyle={styles.dayContent}>
       {events.filter(event => event.allDay).length > 0 ? (
         <View style={styles.allDayStrip}>
           <Text style={styles.allDayLabel}>All-day</Text>
@@ -293,12 +347,14 @@ function DayView({
         ))}
 
         {events.filter(event => !event.allDay).map(event => {
-          const start = new Date(event.startAt);
-          const end = new Date(event.endAt);
-          const top = (start.getHours() + start.getMinutes() / 60) * HOUR_HEIGHT;
-          const durationHours = Math.max((end.getTime() - start.getTime()) / (60 * 60 * 1000), 0.75);
+          const eventDuration = event.endAt - event.startAt;
+          const effectiveStartAt = previewStartTimes[event.id] ?? event.startAt;
+          const effectiveEndAt = effectiveStartAt + eventDuration;
+          const top = topForTimestamp(effectiveStartAt);
+          const height = Math.max((eventDuration / (60 * 60 * 1000)) * HOUR_HEIGHT, HOUR_HEIGHT / 2);
+          const isDragging = draggingEventId === event.id;
           return (
-            <View
+            <Animated.View
               key={event.id}
               style={[
                 styles.eventBlock,
@@ -313,27 +369,31 @@ function DayView({
                 })(),
                 {
                   top,
-                  height: durationHours * HOUR_HEIGHT,
-                  opacity: draggingEventId === event.id ? 0.72 : 1,
+                  height,
+                  opacity: isDragging ? 0.88 : 1,
+                  transform: isDragging ? [{ translateY: dragOffsetY }] : undefined,
+                  zIndex: isDragging ? 5 : 1,
+                  elevation: isDragging ? 6 : 2,
                 },
               ]}
             >
-              <View style={styles.eventHandleWrap} {...panResponder.panHandlers}>
+              <View style={styles.eventHandleWrap}>
                 <TouchableOpacity
                   style={styles.eventHandle}
                   delayLongPress={180}
                   onLongPress={() => {
                     dragRef.current = {
                       eventId: event.id,
-                      startY: top,
                       originalStart: event.startAt,
-                      duration: event.endAt - event.startAt,
+                      duration: eventDuration,
                     };
+                    dragOffsetY.setValue(0);
                     setDraggingEventId(event.id);
                   }}
                   activeOpacity={0.8}
+                  {...panResponder.panHandlers}
                 >
-                  <Text style={styles.eventHandleText}>≡</Text>
+                  <Text style={styles.eventHandleText}>|||</Text>
                 </TouchableOpacity>
               </View>
               <TouchableOpacity
@@ -344,10 +404,10 @@ function DayView({
                 <Text style={styles.eventBlockTitle} numberOfLines={2}>{event.title}</Text>
                 <Text style={styles.eventTypeBadge}>{EVENT_TYPE_LABELS[event.eventType]}</Text>
                 <Text style={styles.eventBlockTime}>
-                  {formatClockTime(event.startAt)} - {formatClockTime(event.endAt)}
+                  {formatClockTime(effectiveStartAt)} - {formatClockTime(effectiveEndAt)}
                 </Text>
               </TouchableOpacity>
-            </View>
+            </Animated.View>
           );
         })}
       </View>
@@ -421,7 +481,7 @@ const styles = StyleSheet.create({
   hourLabel: {
     position: 'absolute',
     left: -58,
-    top: -8,
+    top: -7,
     width: 48,
     textAlign: 'right',
     fontSize: FONTS.size.xs,
