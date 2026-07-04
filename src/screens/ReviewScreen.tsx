@@ -65,8 +65,8 @@ export default function ReviewScreen({
         {!isCalendar ? (
           <>
             <Text style={styles.sectionLabel}>{isTodo ? 'TO-DO CATEGORY' : 'NOTE CATEGORY'}</Text>
-            <View style={styles.folderPill}>
-              <Text style={styles.folderPillText}>{suggestedLabel}</Text>
+            <View style={styles.previewCard}>
+              <Text style={styles.previewTitle}>{suggestedLabel}</Text>
             </View>
           </>
         ) : null}
@@ -74,8 +74,8 @@ export default function ReviewScreen({
         {isTodo && (
           <>
             <Text style={[styles.sectionLabel, { marginTop: 12 }]}>RUNNING LIST</Text>
-            <View style={styles.folderPill}>
-              <Text style={styles.folderPillText}>{todoListLabel}</Text>
+            <View style={styles.previewCard}>
+              <Text style={styles.previewTitle}>{todoListLabel}</Text>
             </View>
           </>
         )}
@@ -112,12 +112,13 @@ export default function ReviewScreen({
           <>
             <Text style={[styles.sectionLabel, { marginTop: 16 }]}>EVENTS</Text>
             {pending.calendarEntries.map((entry, i) => (
-              <View key={i} style={styles.actionItem}>
+              <View key={i} style={styles.previewRow}>
                 <View style={styles.actionDot} />
                 <View style={styles.actionText}>
                   <Text style={styles.actionItemText}>{entry.title}</Text>
                   <Text style={styles.actionDue}>
-                    {[entry.date, entry.time].filter(Boolean).join(' at ') || 'All day today'}
+                    Date: {entry.date || 'Today'}{'\n'}
+                    Time: {entry.time || 'All day'}
                   </Text>
                 </View>
               </View>
@@ -127,35 +128,43 @@ export default function ReviewScreen({
           <>
             <Text style={[styles.sectionLabel, { marginTop: 16 }]}>TASKS</Text>
             {pending.todoItems.map((item, i) => (
-              <View key={i} style={styles.actionItem}>
+              <View key={i} style={styles.previewRow}>
                 <View style={styles.actionDot} />
                 <View style={styles.actionText}>
                   <Text style={styles.actionItemText}>{item.text}</Text>
-                  {item.due && <Text style={styles.actionDue}>{item.due}</Text>}
+                  <Text style={styles.actionDue}>
+                    Reminder: {item.due || 'None inferred'}
+                  </Text>
                 </View>
               </View>
             ))}
           </>
         ) : (
-          pending.actionItems.length > 0 && (
-            <>
-              <Text style={[styles.sectionLabel, { marginTop: 16 }]}>ACTION ITEMS</Text>
-              {pending.actionItems.map((a, i) => (
-                <View key={i} style={styles.actionItem}>
+          <>
+            <Text style={[styles.sectionLabel, { marginTop: 16 }]}>NOTE PREVIEW</Text>
+            <View style={styles.previewCard}>
+              <Text style={styles.previewText}>{pending.summary}</Text>
+            </View>
+            <Text style={[styles.sectionLabel, { marginTop: 16 }]}>ACTION ITEMS</Text>
+            {pending.actionItems.length > 0 ? (
+              pending.actionItems.map((a, i) => (
+                <View key={i} style={styles.previewRow}>
                   <View style={styles.actionDot} />
                   <View style={styles.actionText}>
                     <Text style={styles.actionItemText}>{a.text}</Text>
-                    {a.due && (
-                      <Text style={styles.actionDue}>
-                        {a.due}{a.inferred ? ' - guessed' : ''}
-                      </Text>
-                    )}
+                    <Text style={styles.actionDue}>
+                      Due: {a.due || 'No due date inferred'}{a.inferred && a.due ? ' (inferred)' : ''}
+                    </Text>
                   </View>
                   <SpeakButton text={a.text} />
                 </View>
-              ))}
-            </>
-          )
+              ))
+            ) : (
+              <View style={styles.previewCard}>
+                <Text style={styles.previewText}>No action items were extracted from this note.</Text>
+              </View>
+            )}
+          </>
         )}
 
         <Text style={[styles.sectionLabel, { marginTop: 16 }]}>TRANSCRIPT</Text>
@@ -235,6 +244,24 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   folderPillText: { fontSize: FONTS.size.md, color: COLORS.brown },
+  previewCard: {
+    backgroundColor: COLORS.white50,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 4,
+  },
+  previewTitle: {
+    fontSize: FONTS.size.md,
+    color: COLORS.brown,
+    fontWeight: '600',
+  },
+  previewText: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.brownMid,
+    lineHeight: 20,
+  },
   folderScroll: { marginBottom: 4 },
   folderChip: {
     paddingHorizontal: 12,
@@ -248,6 +275,17 @@ const styles = StyleSheet.create({
   folderChipText: { fontSize: FONTS.size.xs, color: COLORS.brownMid },
   folderChipTextActive: { color: COLORS.brown, fontWeight: '600' },
   actionItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: COLORS.white50,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 6,
+    gap: 8,
+  },
+  previewRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: COLORS.white50,
