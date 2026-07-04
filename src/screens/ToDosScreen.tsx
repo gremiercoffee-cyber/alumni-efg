@@ -25,6 +25,8 @@ interface Props {
   onEditItem: (listId: string, itemId: string, text: string) => void | Promise<void>;
   onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
   onOpenSourceNote: (noteId: string) => void;
+  onDeleteList: (listId: string) => void | Promise<void>;
+  onDeleteCategory: (folderId: string) => void | Promise<void>;
 }
 
 function collectFolderIds(node: FolderNode, ids = new Set<string>()): Set<string> {
@@ -67,7 +69,17 @@ function TodoRow({
   helperText?: string;
 }) {
   return (
-    <View style={styles.itemRow}>
+    <TouchableOpacity
+      style={styles.itemRow}
+      onLongPress={() =>
+        Alert.alert('Delete this item?', item.text, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: () => onDeleteItem(listId, item.id) },
+        ])
+      }
+      delayLongPress={220}
+      activeOpacity={0.96}
+    >
       <TouchableOpacity
         style={[styles.checkbox, item.done && styles.checkboxDone]}
         onPress={() => onToggle(listId, item.id)}
@@ -123,15 +135,7 @@ function TodoRow({
           <TouchableOpacity onPress={() => onEditReminder(listId, item.id)} activeOpacity={0.8}>
             <Text style={styles.rowActionText}>Reminder</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() =>
-              Alert.alert('Delete this item?', item.text, [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => onDeleteItem(listId, item.id) },
-              ])
-            }
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity onPress={() => onDeleteItem(listId, item.id)} activeOpacity={0.8}>
             <Text style={styles.deleteText}>Delete</Text>
           </TouchableOpacity>
           {editing ? (
@@ -143,7 +147,7 @@ function TodoRow({
 
         {helperText ? <Text style={styles.restoreText}>{helperText}</Text> : null}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -159,6 +163,7 @@ function TodoListSection({
   onEditItem,
   onDeleteItem,
   onOpenSourceNote,
+  onDeleteList,
   completedExpanded,
   onToggleCompletedExpanded,
 }: {
@@ -173,6 +178,7 @@ function TodoListSection({
   onEditItem: (listId: string, itemId: string, text: string) => void | Promise<void>;
   onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
   onOpenSourceNote: (noteId: string) => void;
+  onDeleteList: (listId: string) => void | Promise<void>;
   completedExpanded: boolean;
   onToggleCompletedExpanded: () => void;
 }) {
@@ -236,6 +242,17 @@ function TodoListSection({
       <TouchableOpacity
         style={styles.listHeader}
         onPress={onToggleExpanded}
+        onLongPress={() =>
+          Alert.alert(
+            'Delete this list?',
+            `This will delete ${list.items.length} to-do item${list.items.length === 1 ? '' : 's'}. Continue?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Delete list', style: 'destructive', onPress: () => onDeleteList(list.id) },
+            ]
+          )
+        }
+        delayLongPress={240}
         activeOpacity={0.85}
       >
         <View style={styles.listHeaderTextWrap}>
@@ -359,6 +376,8 @@ function FolderSection({
   onEditItem,
   onDeleteItem,
   onOpenSourceNote,
+  onDeleteCategory,
+  onDeleteList,
 }: {
   folder: FolderNode;
   todoLists: TodoList[];
@@ -377,6 +396,8 @@ function FolderSection({
   onEditItem: (listId: string, itemId: string, text: string) => void | Promise<void>;
   onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
   onOpenSourceNote: (noteId: string) => void;
+  onDeleteCategory: (folderId: string) => void | Promise<void>;
+  onDeleteList: (listId: string) => void | Promise<void>;
 }) {
   const descendantIds = useMemo(() => Array.from(collectFolderIds(folder)), [folder]);
   const listsInFolder = todoLists.filter(list => list.folderId === folder.id);
@@ -403,6 +424,17 @@ function FolderSection({
             [folder.id]: !(current[folder.id] ?? true),
           }))
         }
+        onLongPress={() =>
+          Alert.alert(
+            'Delete this category?',
+            `This will delete ${openCount} to-do item${openCount === 1 ? '' : 's'}. Continue?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Delete category', style: 'destructive', onPress: () => onDeleteCategory(folder.id) },
+            ]
+          )
+        }
+        delayLongPress={240}
         activeOpacity={0.85}
       >
         <View style={styles.folderHeaderTextWrap}>
@@ -435,6 +467,7 @@ function FolderSection({
               onEditItem={onEditItem}
               onDeleteItem={onDeleteItem}
               onOpenSourceNote={onOpenSourceNote}
+              onDeleteList={onDeleteList}
               completedExpanded={!!expandedCompleted[list.id]}
               onToggleCompletedExpanded={() =>
                 setExpandedCompleted(current => ({
@@ -465,6 +498,8 @@ function FolderSection({
                 onEditItem={onEditItem}
                 onDeleteItem={onDeleteItem}
                 onOpenSourceNote={onOpenSourceNote}
+                onDeleteCategory={onDeleteCategory}
+                onDeleteList={onDeleteList}
               />
             </View>
           ))}
@@ -486,6 +521,8 @@ export default function ToDosScreen({
   onEditItem,
   onDeleteItem,
   onOpenSourceNote,
+  onDeleteList,
+  onDeleteCategory,
 }: Props) {
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [expandedLists, setExpandedLists] = useState<Record<string, boolean>>({});
@@ -585,6 +622,7 @@ export default function ToDosScreen({
                     onEditItem={onEditItem}
                     onDeleteItem={onDeleteItem}
                     onOpenSourceNote={onOpenSourceNote}
+                    onDeleteList={onDeleteList}
                     completedExpanded={!!expandedCompleted[list.id]}
                     onToggleCompletedExpanded={() =>
                       setExpandedCompleted(current => ({
@@ -617,6 +655,8 @@ export default function ToDosScreen({
                 onEditItem={onEditItem}
                 onDeleteItem={onDeleteItem}
                 onOpenSourceNote={onOpenSourceNote}
+                onDeleteCategory={onDeleteCategory}
+                onDeleteList={onDeleteList}
               />
             ))}
           </>

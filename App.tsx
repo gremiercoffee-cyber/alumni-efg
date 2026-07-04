@@ -599,6 +599,46 @@ export default function App() {
     setCalendarEvents(events => events.filter(event => event.todoItemId !== itemId));
   };
 
+  const deleteTodoList = async (listId: string) => {
+    const list = todoLists.find(entry => entry.id === listId);
+    if (!list) return;
+    await Promise.all(
+      list.items
+        .map(item => item.notificationId)
+        .filter((notificationId): notificationId is string => !!notificationId)
+        .map(notificationId => cancelTodoReminder(notificationId))
+    );
+    setTodoLists(lists => lists.filter(entry => entry.id !== listId));
+    setCalendarEvents(events => events.filter(event => event.todoListId !== listId));
+    if (todoFocusListId === listId) setTodoFocusListId(null);
+  };
+
+  const deleteTodoCategory = async (folderId: string) => {
+    const folder = findNode(todoTree, folderId);
+    if (!folder) return;
+    const descendantIds = collectFolderIds(folder);
+    const listsToDelete = todoLists.filter(list => descendantIds.has(list.folderId));
+    await Promise.all(
+      listsToDelete.flatMap(list =>
+        list.items
+          .map(item => item.notificationId)
+          .filter((notificationId): notificationId is string => !!notificationId)
+          .map(notificationId => cancelTodoReminder(notificationId))
+      )
+    );
+    setTodoTree(current => deleteFolder(current, folderId));
+    setTodoLists(lists => lists.filter(list => !descendantIds.has(list.folderId)));
+    setCalendarEvents(events =>
+      events.filter(
+        event =>
+          !descendantIds.has(event.categoryFolderId || '') &&
+          !listsToDelete.some(list => list.id === event.todoListId)
+      )
+    );
+    if (todoFocusFolderId && descendantIds.has(todoFocusFolderId)) setTodoFocusFolderId(null);
+    if (todoFocusListId && listsToDelete.some(list => list.id === todoFocusListId)) setTodoFocusListId(null);
+  };
+
   const addManualTodoItem = (listId: string, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -768,6 +808,8 @@ export default function App() {
         onEditItem={updateTodoItemText}
         onDeleteItem={deleteTodoItem}
         onOpenSourceNote={openSourceNote}
+        onDeleteList={deleteTodoList}
+        onDeleteCategory={deleteTodoCategory}
       />
     );
   } else if (tab === 'settings') {
