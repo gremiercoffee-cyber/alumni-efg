@@ -108,10 +108,15 @@ export async function classifyNote({
   );
   const todosDesc = todoContext(todoLists, folderList);
   const contextBlock = settingsContext(settings);
+  const localNow = new Date();
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const system = `You organize spoken captures for one person. Decide whether the transcript is a general note, an explicit running to-do list, or a set of calendar entries.
 
 ${contextBlock ? `Context about this person:\n${contextBlock}\n` : ''}
+Local timezone: ${timezone}
+Current local time: ${localNow.toString()}
+
 Existing note/to-do folders:
 ${folderDesc}
 
@@ -154,18 +159,20 @@ For calendar-directed scheduling, use exactly this shape:
   "existingFolderId": null,
   "newFolderSuggestion": null,
   "calendarEntries": [
-    { "title": "short event title", "date": "upcoming day or date", "time": "specific time or a phrase like 'morning'", "durationMinutes": 60 }
+    { "title": "short event title", "date": "upcoming day or date", "time": "specific time or a phrase like 'morning'", "durationMinutes": 60, "eventType": "meeting" }
   ]
 }
 
 Rules:
 - Use contentType "todo_items" only when the person is clearly rattling off tasks they need to do. Meeting recaps, thoughts, ideas, and summaries are notes even if they imply follow-up actions.
 - Use contentType "calendar_entries" when the speaker is primarily scheduling reminders, appointments, meetings, calls, deliveries, or date-bound events.
+- Treat spoken times as local times in the user's timezone above, never UTC.
 - If a weekday is mentioned without a year, interpret it as the nearest upcoming occurrence.
 - If the time is vague, keep the phrasing as given. "morning" should stay "morning" so the app can map it to 9:00 AM.
 - For notes, infer action items when the content implies something needs to happen.
 - For to-do items, split the transcript into discrete checklist items and do not also return actionItems.
 - For calendar_entries, split one recording into one array item per event.
+- For calendar_entries, include eventType using one of: meeting, reminder, delivery, appointment, task, shiur, personal, other.
 - Every todoItems[].text must read like a handwritten list item or sticky note: shortest possible phrasing that still keeps the full intent.
 - Remove filler and spoken framing such as "I need to", "don't forget to", "I should", "we need to", "I have to", "look into", and similar prefixes unless a word is truly required for meaning.
 - If the core task is best expressed as a noun phrase, use a noun phrase. If it is best expressed as an action, use a short action phrase.

@@ -68,11 +68,13 @@ export async function loadAppState(): Promise<AppState | null> {
           ...item,
           reminderAt: item.reminderAt ?? null,
           notificationId: item.notificationId ?? null,
+          eventId: item.eventId ?? null,
           fromNote: item.fromNote ?? null,
         })),
       })),
       calendarEvents: (state.calendarEvents || []).map(event => ({
         ...event,
+        eventType: event.eventType ?? (event.kind === 'action_item' ? 'task' : 'other'),
         sourceNote: event.sourceNote ?? null,
       })),
       keeperItems: state.keeperItems || migrateLegacyLinks(state.savedLinks || []),

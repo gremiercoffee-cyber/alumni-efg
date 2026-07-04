@@ -2,6 +2,7 @@ export interface FolderNode {
   id: string;
   name: string;
   children: FolderNode[];
+  color?: string | null;
 }
 
 export interface FlatFolder {
@@ -32,6 +33,7 @@ export interface CalendarEvent {
   todoItemId: string | null;
   sourceNote: EventSourceNote | null;
   kind: 'calendar' | 'action_item';
+  eventType: 'meeting' | 'reminder' | 'delivery' | 'appointment' | 'task' | 'shiur' | 'personal' | 'other';
   ts: number;
 }
 
@@ -79,6 +81,7 @@ export interface PendingCalendarEntry {
   date: string | null;
   time: string | null;
   durationMinutes: number | null;
+  eventType?: 'meeting' | 'reminder' | 'delivery' | 'appointment' | 'task' | 'shiur' | 'personal' | 'other' | null;
 }
 
 export interface PendingCalendarCapture extends BasePendingCapture {
@@ -105,6 +108,7 @@ export interface TodoItem {
   due: string | null;
   reminderAt: number | null;
   notificationId: string | null;
+  eventId: string | null;
   done: boolean;
   ts: number;
   fromNote: EventSourceNote | null;

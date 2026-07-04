@@ -34,6 +34,15 @@ export default function ReviewScreen({
   const allFolders = flattenFolders(tree);
   const isTodo = pending.contentType === 'todo_items';
   const isCalendar = pending.contentType === 'calendar_entries';
+  const todoItems = isTodo ? pending.todoItems : [];
+  const noteActions = !isTodo && !isCalendar ? pending.actionItems : [];
+  const calendarEntries = isCalendar ? pending.calendarEntries : [];
+  const hasBodyContent =
+    !!pending.title ||
+    !!pending.summary ||
+    todoItems.length > 0 ||
+    noteActions.length > 0 ||
+    calendarEntries.length > 0;
 
   const suggestedLabel = pending.existingFolderId
     ? folderPathLabel(pending.existingFolderId, allFolders)
@@ -48,130 +57,154 @@ export default function ReviewScreen({
     : null;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onDiscard}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      statusBarTranslucent
+      onRequestClose={() => {}}
+    >
       <View style={styles.modalScrim}>
         <View style={styles.container}>
           <TopBar subtitle="Review" title={isTodo ? 'New to-dos' : isCalendar ? 'New schedule items' : 'New note'} />
           <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <Text style={styles.title}>{pending.title}</Text>
-          <Text style={styles.summary}>{pending.summary}</Text>
-        </View>
-
-        <View style={styles.titleRow}>
-          <SpeakButton text={`${pending.title}. ${pending.summary}`} />
-        </View>
-
-        {!isCalendar ? (
-          <>
-            <Text style={styles.sectionLabel}>{isTodo ? 'TO-DO CATEGORY' : 'NOTE CATEGORY'}</Text>
-            <View style={styles.previewCard}>
-              <Text style={styles.previewTitle}>{suggestedLabel}</Text>
+            <View style={styles.hero}>
+              <Text style={styles.title}>{pending.title || 'Ready to review'}</Text>
+              <Text style={styles.summary}>
+                {pending.summary || 'We processed the recording. Review the extracted details below before saving.'}
+              </Text>
             </View>
-          </>
-        ) : null}
 
-        {isTodo && (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: 12 }]}>RUNNING LIST</Text>
-            <View style={styles.previewCard}>
-              <Text style={styles.previewTitle}>{todoListLabel}</Text>
+            <View style={styles.titleRow}>
+              <SpeakButton text={`${pending.title || ''}. ${pending.summary || ''}`} />
             </View>
-          </>
-        )}
 
-        {!isCalendar && allFolders.length > 1 && (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: 12 }]}>CHOOSE CATEGORY</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.folderScroll}>
-              {allFolders.slice(1).map(f => (
-                <TouchableOpacity
-                  key={f.id}
-                  style={[
-                    styles.folderChip,
-                    selectedFolder === f.id && styles.folderChipActive,
-                  ]}
-                  onPress={() => setSelectedFolder(f.id === selectedFolder ? undefined : f.id)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      styles.folderChipText,
-                      selectedFolder === f.id && styles.folderChipTextActive,
-                    ]}
-                  >
-                    {f.path.slice(1).join(' / ') || f.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </>
-        )}
+            {!isCalendar ? (
+              <>
+                <Text style={styles.sectionLabel}>{isTodo ? 'TO-DO CATEGORY' : 'NOTE CATEGORY'}</Text>
+                <View style={styles.previewCard}>
+                  <Text style={styles.previewTitle}>{suggestedLabel}</Text>
+                </View>
+              </>
+            ) : null}
 
-        {isCalendar ? (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: 16 }]}>EVENTS</Text>
-            {pending.calendarEntries.map((entry, i) => (
-              <View key={i} style={styles.previewRow}>
-                <View style={styles.actionDot} />
-                <View style={styles.actionText}>
-                  <Text style={styles.actionItemText}>{entry.title}</Text>
-                  <Text style={styles.actionDue}>
-                    Date: {entry.date || 'Today'}{'\n'}
-                    Time: {entry.time || 'All day'}
-                  </Text>
+            {isTodo ? (
+              <>
+                <Text style={[styles.sectionLabel, { marginTop: 12 }]}>TARGET LIST</Text>
+                <View style={styles.previewCard}>
+                  <Text style={styles.previewTitle}>{todoListLabel || 'New to-do list'}</Text>
                 </View>
-              </View>
-            ))}
-          </>
-        ) : isTodo ? (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: 16 }]}>TASKS</Text>
-            {pending.todoItems.map((item, i) => (
-              <View key={i} style={styles.previewRow}>
-                <View style={styles.actionDot} />
-                <View style={styles.actionText}>
-                  <Text style={styles.actionItemText}>{item.text}</Text>
-                  <Text style={styles.actionDue}>
-                    Reminder: {item.due || 'None inferred'}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </>
-        ) : (
-          <>
-            <Text style={[styles.sectionLabel, { marginTop: 16 }]}>NOTE PREVIEW</Text>
-            <View style={styles.previewCard}>
-              <Text style={styles.previewText}>{pending.summary}</Text>
-            </View>
-            <Text style={[styles.sectionLabel, { marginTop: 16 }]}>ACTION ITEMS</Text>
-            {pending.actionItems.length > 0 ? (
-              pending.actionItems.map((a, i) => (
-                <View key={i} style={styles.previewRow}>
-                  <View style={styles.actionDot} />
-                  <View style={styles.actionText}>
-                    <Text style={styles.actionItemText}>{a.text}</Text>
-                    <Text style={styles.actionDue}>
-                      Due: {a.due || 'No due date inferred'}{a.inferred && a.due ? ' (inferred)' : ''}
-                    </Text>
-                  </View>
-                  <SpeakButton text={a.text} />
-                </View>
-              ))
-            ) : (
+              </>
+            ) : null}
+
+            {!isCalendar && allFolders.length > 1 ? (
+              <>
+                <Text style={[styles.sectionLabel, { marginTop: 12 }]}>CHOOSE CATEGORY</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.folderScroll}>
+                  {allFolders.slice(1).map(f => (
+                    <TouchableOpacity
+                      key={f.id}
+                      style={[styles.folderChip, selectedFolder === f.id && styles.folderChipActive]}
+                      onPress={() => setSelectedFolder(f.id === selectedFolder ? undefined : f.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[styles.folderChipText, selectedFolder === f.id && styles.folderChipTextActive]}
+                      >
+                        {f.path.slice(1).join(' / ') || f.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+
+            {!hasBodyContent ? (
               <View style={styles.previewCard}>
-                <Text style={styles.previewText}>No action items were extracted from this note.</Text>
+                <Text style={styles.previewText}>No items extracted - try recording again.</Text>
               </View>
-            )}
-          </>
-        )}
+            ) : null}
 
-        <Text style={[styles.sectionLabel, { marginTop: 16 }]}>TRANSCRIPT</Text>
-        <View style={styles.transcriptRow}>
-          <Text style={styles.transcript}>{pending.transcript}</Text>
-          <SpeakButton text={pending.transcript} />
-        </View>
+            {isCalendar ? (
+              <>
+                <Text style={[styles.sectionLabel, { marginTop: 16 }]}>EVENTS</Text>
+                {calendarEntries.length ? (
+                  calendarEntries.map((entry, i) => (
+                    <View key={i} style={styles.previewRow}>
+                      <View style={styles.actionDot} />
+                      <View style={styles.actionText}>
+                        <Text style={styles.actionItemText}>{entry.title || 'Untitled event'}</Text>
+                        <Text style={styles.actionDue}>
+                          Date: {entry.date || 'Today'}{'\n'}
+                          Time: {entry.time || 'All day'}
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.previewCard}>
+                    <Text style={styles.previewText}>No items extracted - try recording again.</Text>
+                  </View>
+                )}
+              </>
+            ) : isTodo ? (
+              <>
+                <Text style={[styles.sectionLabel, { marginTop: 16 }]}>TASKS</Text>
+                {todoItems.length ? (
+                  todoItems.map((item, i) => (
+                    <View key={i} style={styles.previewRow}>
+                      <View style={styles.actionDot} />
+                      <View style={styles.actionText}>
+                        <Text style={styles.actionItemText}>{item.text || 'Untitled task'}</Text>
+                        <Text style={styles.actionDue}>List: {todoListLabel || 'New to-do list'}</Text>
+                        <Text style={styles.actionDue}>Reminder: {item.due || 'None inferred'}</Text>
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.previewCard}>
+                    <Text style={styles.previewText}>No items extracted - try recording again.</Text>
+                  </View>
+                )}
+              </>
+            ) : (
+              <>
+                <Text style={[styles.sectionLabel, { marginTop: 16 }]}>NOTE PREVIEW</Text>
+                <View style={styles.previewCard}>
+                  <Text style={styles.previewText}>
+                    {pending.summary || 'No summary extracted - try recording again.'}
+                  </Text>
+                </View>
+                <Text style={[styles.sectionLabel, { marginTop: 16 }]}>ACTION ITEMS</Text>
+                {noteActions.length ? (
+                  noteActions.map((a, i) => (
+                    <View key={i} style={styles.previewRow}>
+                      <View style={styles.actionDot} />
+                      <View style={styles.actionText}>
+                        <Text style={styles.actionItemText}>{a.text || 'Untitled action item'}</Text>
+                        <Text style={styles.actionDue}>
+                          Due: {a.due || 'No due date inferred'}
+                          {a.inferred && a.due ? ' (inferred)' : ''}
+                        </Text>
+                      </View>
+                      <SpeakButton text={a.text} />
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.previewCard}>
+                    <Text style={styles.previewText}>No items extracted - try recording again.</Text>
+                  </View>
+                )}
+              </>
+            )}
+
+            <Text style={[styles.sectionLabel, { marginTop: 16 }]}>TRANSCRIPT</Text>
+            <View style={styles.transcriptRow}>
+              <Text style={styles.transcript}>
+                {pending.transcript || 'Transcript unavailable for this recording.'}
+              </Text>
+              <SpeakButton text={pending.transcript || ''} />
+            </View>
           </ScrollView>
 
           <View style={styles.footer}>
@@ -197,6 +230,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(45, 36, 29, 0.28)',
     justifyContent: 'flex-end',
+    zIndex: 1000,
+    elevation: 1000,
   },
   container: {
     maxHeight: '92%',
@@ -204,6 +239,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     overflow: 'hidden',
+    zIndex: 1001,
+    elevation: 1001,
   },
   scroll: { flex: 1 },
   content: { padding: 20, paddingBottom: 8 },

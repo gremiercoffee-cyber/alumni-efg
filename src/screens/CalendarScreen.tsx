@@ -9,22 +9,25 @@ import {
   View,
 } from 'react-native';
 import TopBar from '../components/TopBar';
-import { COLORS, FONTS } from '../constants';
-import { CalendarEvent } from '../types';
+import { COLORS, EVENT_TYPE_LABELS, FONTS } from '../constants';
+import { CalendarEvent, FolderNode } from '../types';
 import {
   addDays,
   eventOccursOnDay,
   formatClockTime,
   formatMonthLabel,
   formatShortDate,
+  getFolderColor,
   sameDay,
   startOfDay,
   startOfWeek,
+  tintColor,
 } from '../utils';
 
 type ViewMode = 'day' | 'week' | 'month';
 
 interface Props {
+  todoTree: FolderNode;
   events: CalendarEvent[];
   onOpenEvent: (event: CalendarEvent) => void;
   onRescheduleEvent: (eventId: string, startAt: number, endAt: number, allDay: boolean) => void;
@@ -33,7 +36,7 @@ interface Props {
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
 const HOUR_HEIGHT = 76;
 
-export default function CalendarScreen({ events, onOpenEvent, onRescheduleEvent }: Props) {
+export default function CalendarScreen({ todoTree, events, onOpenEvent, onRescheduleEvent }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
 
@@ -100,6 +103,7 @@ export default function CalendarScreen({ events, onOpenEvent, onRescheduleEvent 
 
       {viewMode === 'day' ? (
         <DayView
+          todoTree={todoTree}
           day={selectedDate}
           events={dayEvents}
           onOpenEvent={onOpenEvent}
@@ -131,14 +135,25 @@ export default function CalendarScreen({ events, onOpenEvent, onRescheduleEvent 
                   {items.map(event => (
                     <TouchableOpacity
                       key={event.id}
-                      style={styles.weekEvent}
+                      style={styles.weekEventWrap}
                       onPress={() => onOpenEvent(event)}
                       activeOpacity={0.82}
                     >
-                      <Text style={styles.weekEventTitle} numberOfLines={2}>{event.title}</Text>
-                      <Text style={styles.weekEventTime}>
-                        {event.allDay ? 'All day' : `${formatClockTime(event.startAt)} - ${formatClockTime(event.endAt)}`}
-                      </Text>
+                      <View
+                        style={[
+                          styles.weekEvent,
+                          (() => {
+                            const accent = getFolderColor(todoTree, event.categoryFolderId);
+                            return accent ? { backgroundColor: tintColor(accent, '33'), borderColor: tintColor(accent, '88') } : null;
+                          })(),
+                        ]}
+                      >
+                        <Text style={styles.weekEventTitle} numberOfLines={2}>{event.title}</Text>
+                        <Text style={styles.weekEventBadge}>{EVENT_TYPE_LABELS[event.eventType]}</Text>
+                        <Text style={styles.weekEventTime}>
+                          {event.allDay ? 'All day' : `${formatClockTime(event.startAt)} - ${formatClockTime(event.endAt)}`}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -173,7 +188,15 @@ export default function CalendarScreen({ events, onOpenEvent, onRescheduleEvent 
                     {day.getDate()}
                   </Text>
                   {dayEventsCount > 0 ? (
-                    <View style={styles.monthIndicator}>
+                    <View
+                      style={[
+                        styles.monthIndicator,
+                        (() => {
+                          const accent = getFolderColor(todoTree, events.find(event => eventOccursOnDay(event, day))?.categoryFolderId || null);
+                          return accent ? { backgroundColor: accent } : null;
+                        })(),
+                      ]}
+                    >
                       <Text style={styles.monthIndicatorText}>{dayEventsCount}</Text>
                     </View>
                   ) : (
@@ -190,11 +213,13 @@ export default function CalendarScreen({ events, onOpenEvent, onRescheduleEvent 
 }
 
 function DayView({
+  todoTree,
   day,
   events,
   onOpenEvent,
   onRescheduleEvent,
 }: {
+  todoTree: FolderNode;
   day: Date;
   events: CalendarEvent[];
   onOpenEvent: (event: CalendarEvent) => void;
@@ -277,30 +302,47 @@ function DayView({
               key={event.id}
               style={[
                 styles.eventBlock,
+                (() => {
+                  const accent = getFolderColor(todoTree, event.categoryFolderId);
+                  return accent
+                    ? {
+                        backgroundColor: tintColor(accent, 'dd'),
+                        borderColor: accent,
+                      }
+                    : null;
+                })(),
                 {
                   top,
                   height: durationHours * HOUR_HEIGHT,
                   opacity: draggingEventId === event.id ? 0.72 : 1,
                 },
               ]}
-              {...panResponder.panHandlers}
             >
+              <View style={styles.eventHandleWrap} {...panResponder.panHandlers}>
+                <TouchableOpacity
+                  style={styles.eventHandle}
+                  delayLongPress={180}
+                  onLongPress={() => {
+                    dragRef.current = {
+                      eventId: event.id,
+                      startY: top,
+                      originalStart: event.startAt,
+                      duration: event.endAt - event.startAt,
+                    };
+                    setDraggingEventId(event.id);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.eventHandleText}>≡</Text>
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity
                 style={styles.eventTouch}
-                delayLongPress={220}
-                onLongPress={() => {
-                  dragRef.current = {
-                    eventId: event.id,
-                    startY: top,
-                    originalStart: event.startAt,
-                    duration: event.endAt - event.startAt,
-                  };
-                  setDraggingEventId(event.id);
-                }}
                 onPress={() => onOpenEvent(event)}
                 activeOpacity={0.82}
               >
                 <Text style={styles.eventBlockTitle} numberOfLines={2}>{event.title}</Text>
+                <Text style={styles.eventTypeBadge}>{EVENT_TYPE_LABELS[event.eventType]}</Text>
                 <Text style={styles.eventBlockTime}>
                   {formatClockTime(event.startAt)} - {formatClockTime(event.endAt)}
                 </Text>
@@ -392,14 +434,48 @@ const styles = StyleSheet.create({
     right: 4,
     backgroundColor: '#c96544',
     borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'transparent',
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  eventTouch: { flex: 1, padding: 12 },
+  eventHandleWrap: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  eventHandle: {
+    width: 24,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventHandleText: {
+    color: '#fff6ec',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  eventTouch: { flex: 1, padding: 12, paddingLeft: 30 },
   eventBlockTitle: { color: '#fff8f1', fontWeight: '700', fontSize: FONTS.size.sm },
+  eventTypeBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    color: '#fff8f1',
+    fontSize: 10,
+    fontWeight: '700',
+  },
   eventBlockTime: { color: '#fff1e8', fontSize: FONTS.size.xs, marginTop: 6 },
   weekContent: { padding: 12, paddingBottom: 120 },
   weekGrid: { gap: 10 },
@@ -419,13 +495,21 @@ const styles = StyleSheet.create({
   weekHeaderLabel: { color: COLORS.brown, fontSize: FONTS.size.sm, fontWeight: '700' },
   weekHeaderDate: { color: COLORS.brownLight, fontSize: FONTS.size.sm },
   weekEmpty: { color: COLORS.brownFaint, fontSize: FONTS.size.xs },
+  weekEventWrap: { marginTop: 8 },
   weekEvent: {
     backgroundColor: COLORS.cream,
     borderRadius: 12,
     padding: 10,
-    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   weekEventTitle: { color: COLORS.brown, fontSize: FONTS.size.sm, fontWeight: '600' },
+  weekEventBadge: {
+    color: COLORS.brown,
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 5,
+  },
   weekEventTime: { color: COLORS.brownLight, fontSize: FONTS.size.xs, marginTop: 4 },
   monthContent: { padding: 12, paddingBottom: 120 },
   monthHeaderRow: { flexDirection: 'row', marginBottom: 8 },

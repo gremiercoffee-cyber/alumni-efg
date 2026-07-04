@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import ActionSheetModal from '../components/ActionSheetModal';
+import NamePromptModal from '../components/NamePromptModal';
 import TopBar from '../components/TopBar';
 import { COLORS, FONTS } from '../constants';
 import { countNotes } from '../utils';
@@ -44,20 +44,12 @@ function FolderRow({
   });
   const total = countNotes(folder, notesByFolder);
 
-  const showActions = () => {
-    Alert.alert(folder.name, 'Choose an action', [
-      { text: 'Rename', onPress: () => onRenameFolder(folder.id, folder.name) },
-      { text: 'Delete', style: 'destructive', onPress: () => onDeleteFolder(folder.id) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
-
   return (
     <>
       <TouchableOpacity
         style={[styles.row, { paddingLeft: 20 + depth * 16 }]}
         onPress={() => onOpenFolder(folder)}
-        onLongPress={showActions}
+        onLongPress={() => onRenameFolder(folder.id, folder.name)}
         delayLongPress={220}
         activeOpacity={0.7}
       >
@@ -92,6 +84,14 @@ export default function FoldersScreen({
   const [modalVisible, setModalVisible] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [editingFolder, setEditingFolder] = useState<{ id: string; name: string } | null>(null);
+  const [actionFolder, setActionFolder] = useState<{ id: string; name: string } | null>(null);
+  const notesByFolder = useMemo(() => {
+    const counts: Record<string, number> = {};
+    notes.forEach(note => {
+      counts[note.folderId] = (counts[note.folderId] || 0) + 1;
+    });
+    return counts;
+  }, [notes]);
 
   const submitFolder = () => {
     const trimmed = nameInput.trim();
@@ -112,6 +112,7 @@ export default function FoldersScreen({
     setEditingFolder({ id: folderId, name });
     setNameInput(name);
     setModalVisible(true);
+    setActionFolder(null);
   };
 
   return (
@@ -159,7 +160,7 @@ export default function FoldersScreen({
                 notes={notes}
                 depth={0}
                 onOpenFolder={onOpenFolder}
-                onRenameFolder={openRenameModal}
+                onRenameFolder={(folderId, name) => setActionFolder({ id: folderId, name })}
                 onDeleteFolder={onDeleteFolder}
               />
             ))}
@@ -179,41 +180,59 @@ export default function FoldersScreen({
         <Text style={styles.fabIcon}>+</Text>
       </TouchableOpacity>
 
-      <Modal visible={modalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>
-              {editingFolder ? 'Rename category' : 'New category'}
-            </Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Category name"
-              placeholderTextColor={COLORS.brownFaint}
-              value={nameInput}
-              onChangeText={setNameInput}
-              autoFocus
-              onSubmitEditing={submitFolder}
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => {
-                  setNameInput('');
-                  setEditingFolder(null);
-                  setModalVisible(false);
-                }}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalCreate} onPress={submitFolder}>
-                <Text style={styles.modalCreateText}>
-                  {editingFolder ? 'Save' : 'Create'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ActionSheetModal
+        visible={!!actionFolder}
+        title={actionFolder?.name || 'Category'}
+        message="Choose an action"
+        options={[
+          {
+            label: 'Rename',
+            onPress: () => actionFolder && openRenameModal(actionFolder.id, actionFolder.name),
+          },
+          {
+            label: 'Delete',
+            destructive: true,
+            onPress: () => {
+              if (!actionFolder) return;
+              const folder = tree.children
+                .flatMap(function walk(node): FolderNode[] {
+                  return [node, ...node.children.flatMap(walk)];
+                })
+                .find(node => node.id === actionFolder.id);
+              const noteCount = folder ? countNotes(folder, notesByFolder) : 0;
+              const folderId = actionFolder.id;
+              const folderName = actionFolder.name;
+              setActionFolder(null);
+              Alert.alert(
+                'Delete this category?',
+                noteCount
+                  ? `This folder contains ${noteCount} note${noteCount === 1 ? '' : 's'}. Deleting it will move them to Miscellaneous.`
+                  : `Delete "${folderName}"?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete', style: 'destructive', onPress: () => onDeleteFolder(folderId) },
+                ]
+              );
+            },
+          },
+        ]}
+        onCancel={() => setActionFolder(null)}
+      />
+
+      <NamePromptModal
+        visible={modalVisible}
+        title={editingFolder ? 'Rename category' : 'New category'}
+        placeholder="Category name"
+        value={nameInput}
+        confirmLabel={editingFolder ? 'Save' : 'Create'}
+        onChangeText={setNameInput}
+        onConfirm={submitFolder}
+        onCancel={() => {
+          setNameInput('');
+          setEditingFolder(null);
+          setModalVisible(false);
+        }}
+      />
     </View>
   );
 }
@@ -284,45 +303,4 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   fabIcon: { fontSize: 26, color: COLORS.bg, marginTop: -2 },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalBox: {
-    width: '80%',
-    backgroundColor: COLORS.bg,
-    borderRadius: 14,
-    padding: 20,
-  },
-  modalTitle: {
-    fontSize: FONTS.size.lg,
-    fontWeight: '600',
-    color: COLORS.brown,
-    marginBottom: 12,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    padding: 10,
-    fontSize: FONTS.size.md,
-    color: COLORS.brown,
-    marginBottom: 16,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-  },
-  modalCancel: { paddingVertical: 8, paddingHorizontal: 12 },
-  modalCancelText: { fontSize: FONTS.size.md, color: COLORS.brownFaint },
-  modalCreate: {
-    backgroundColor: COLORS.brown,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-  },
-  modalCreateText: { fontSize: FONTS.size.md, color: COLORS.bg, fontWeight: '600' },
 });

@@ -35,6 +35,7 @@ import {
 } from './src/lib/reminders';
 import {
   addChildFolder,
+  assignCategoryColor,
   collectFolderIds,
   deleteFolder,
   ensureFolder,
@@ -47,6 +48,7 @@ import {
   makeId,
   parseNaturalDateTime,
   parseSuggestedReminder,
+  nextCategoryColor,
   renameFolder,
   withDuration,
 } from './src/utils';
@@ -126,7 +128,14 @@ export default function App() {
   const [todoFocusFolderId, setTodoFocusFolderId] = useState<string | null>(null);
   const [todoFocusListId, setTodoFocusListId] = useState<string | null>(null);
   const [reminderQueue, setReminderQueue] = useState<ReminderQueueItem[]>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const handledShareUrls = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timeout = setTimeout(() => setToastMessage(null), 2200);
+    return () => clearTimeout(timeout);
+  }, [toastMessage]);
 
   useEffect(() => {
     if (!openFolder) return;
@@ -344,6 +353,13 @@ export default function App() {
     ]);
   };
 
+  const ensureTodoCategoryColor = (folderId: string, baseTree = todoTree) => {
+    if (folderId === 'root') return;
+    const folder = findNode(baseTree, folderId);
+    if (!folder || folder.color) return;
+    setTodoTree(current => assignCategoryColor(current, folderId, nextCategoryColor(current)));
+  };
+
   const createActionItemsList = (
     sourceFolderId: string,
     items: Array<{ text: string; due: string | null }>,
@@ -356,6 +372,7 @@ export default function App() {
       due: item.due || null,
       reminderAt: parseSuggestedReminder(item.due),
       notificationId: null,
+      eventId: null,
       done: false,
       ts: Date.now(),
       fromNote: sourceNote,
@@ -387,6 +404,94 @@ export default function App() {
     return { ...item, notificationId };
   };
 
+  const syncLinkedEventForTodo = (listId: string, folderId: string, item: TodoItem): TodoItem => {
+    if (!item.reminderAt) {
+      if (item.eventId) {
+        setCalendarEvents(events => events.filter(event => event.id !== item.eventId));
+      }
+      return { ...item, eventId: null };
+    }
+
+    const eventId = item.eventId || makeId('event');
+    setCalendarEvents(events => {
+      const existing = events.find(event => event.id === eventId);
+      const durationMs = existing ? existing.endAt - existing.startAt : 60 * 60 * 1000;
+      const nextEvent: CalendarEvent = {
+        id: eventId,
+        title: item.text,
+        startAt: item.reminderAt,
+        endAt: item.reminderAt + durationMs,
+        allDay: false,
+        categoryFolderId: folderId,
+        todoListId: listId,
+        todoItemId: item.id,
+        sourceNote: item.fromNote,
+        kind: item.fromNote ? 'action_item' : 'calendar',
+        eventType: 'task',
+        ts: existing?.ts || Date.now(),
+      };
+      return existing ? events.map(event => (event.id === eventId ? nextEvent : event)) : [nextEvent, ...events];
+    });
+    return { ...item, eventId };
+  };
+
+  const updateScheduledItem = async (
+    eventId: string,
+    newTime: number,
+    options?: { durationMs?: number; title?: string; eventType?: CalendarEvent['eventType'] }
+  ) => {
+    let linkedTodo: { listId: string; folderId: string; itemId: string; text: string } | null = null;
+    todoLists.some(list => {
+      const item = list.items.find(entry => entry.eventId === eventId);
+      if (!item) return false;
+      linkedTodo = { listId: list.id, folderId: list.folderId, itemId: item.id, text: item.text };
+      return true;
+    });
+
+    if (linkedTodo) {
+      const listId = linkedTodo.listId;
+      const folderId = linkedTodo.folderId;
+      const itemId = linkedTodo.itemId;
+      const text = options?.title || linkedTodo.text;
+      let notificationId =
+        todoLists.find(list => list.id === listId)?.items.find(item => item.id === itemId)?.notificationId || null;
+      if (notificationId) {
+        await cancelTodoReminder(notificationId);
+      }
+      notificationId = await scheduleTodoReminder('To-do reminder', text, newTime, listId, folderId);
+      const due = formatReminderLabel(newTime);
+      setTodoLists(lists =>
+        lists.map(list =>
+          list.id === listId
+            ? {
+                ...list,
+                items: list.items.map(item =>
+                  item.id === itemId
+                    ? { ...item, text, reminderAt: newTime, due, notificationId, eventId }
+                    : item
+                ),
+              }
+            : list
+        )
+      );
+    }
+
+    setCalendarEvents(events =>
+      events.map(event =>
+        event.id === eventId
+          ? {
+              ...event,
+              title: options?.title || event.title,
+              startAt: newTime,
+              endAt: newTime + (options?.durationMs || (event.endAt - event.startAt)),
+              allDay: false,
+              eventType: options?.eventType || event.eventType,
+            }
+          : event
+      )
+    );
+  };
+
   const appendCalendarEvents = (
     items: Array<{ title: string; due: string | null; todoItemId?: string | null }>,
     sourceFolderId: string | null,
@@ -409,6 +514,7 @@ export default function App() {
           todoItemId: item.todoItemId || null,
           sourceNote,
           kind: sourceNote ? 'action_item' : 'calendar',
+          eventType: sourceNote ? 'task' : 'other',
           ts: Date.now(),
         } as CalendarEvent;
       })
@@ -441,6 +547,7 @@ export default function App() {
                 todoItemId: null,
                 sourceNote: null,
                 kind: 'calendar',
+                eventType: pending.calendarEntries[index].eventType || 'other',
                 ts: Date.now(),
               } as CalendarEvent)
             : null
@@ -459,6 +566,7 @@ export default function App() {
         : resolveFolderInTree(todoTree, pending);
 
       if (folderResolution.nextTree !== todoTree) setTodoTree(folderResolution.nextTree);
+      ensureTodoCategoryColor(folderResolution.folderId, folderResolution.nextTree);
 
       const createdItems: TodoItem[] = pending.todoItems.map(item => ({
         id: makeId('todo'),
@@ -466,6 +574,7 @@ export default function App() {
         due: item.due || null,
         reminderAt: parseSuggestedReminder(item.due),
         notificationId: null,
+        eventId: null,
         done: false,
         ts: Date.now(),
         fromNote: null,
@@ -495,8 +604,9 @@ export default function App() {
       const finalListId = nextListId;
       Promise.all(createdItems.map(item => scheduleReminderIfNeeded(finalListId, folderResolution.folderId, item))).then(
         scheduledItems => {
+          const linkedItems = scheduledItems.map(item => syncLinkedEventForTodo(finalListId, folderResolution.folderId, item));
           setTodoLists(lists =>
-            lists.map(list => (list.id === finalListId ? { ...list, items: scheduledItems } : list))
+            lists.map(list => (list.id === finalListId ? { ...list, items: linkedItems } : list))
           );
         }
       );
@@ -539,16 +649,9 @@ export default function App() {
       const scheduledItems = await Promise.all(
         actionList.todoItems.map(item => scheduleReminderIfNeeded(actionList.listId, folderResolution.folderId, item))
       );
+      const linkedItems = scheduledItems.map(item => syncLinkedEventForTodo(actionList.listId, folderResolution.folderId, item));
       setTodoLists(current =>
-        current.map(list => (list.id === actionList.listId ? { ...list, items: scheduledItems } : list))
-      );
-      appendCalendarEvents(
-        scheduledItems
-          .filter(item => item.due)
-          .map(item => ({ title: item.text, due: item.due, todoItemId: item.id })),
-        folderResolution.folderId,
-        sourceNote,
-        actionList.listId
+        current.map(list => (list.id === actionList.listId ? { ...list, items: linkedItems } : list))
       );
     }
 
@@ -572,6 +675,14 @@ export default function App() {
     setTodoLists(lists => lists.map(list => (list.id === listId ? { ...list, title } : list)));
   };
 
+  const renameTodoCategory = (folderId: string, name: string) => {
+    setTodoTree(current => renameFolder(current, folderId, name));
+  };
+
+  const changeTodoCategoryColor = (folderId: string, color: string) => {
+    setTodoTree(current => assignCategoryColor(current, folderId, color));
+  };
+
   const updateTodoItemText = async (listId: string, itemId: string, text: string) => {
     const list = todoLists.find(entry => entry.id === listId);
     const item = list?.items.find(entry => entry.id === itemId);
@@ -584,7 +695,14 @@ export default function App() {
     setTodoLists(lists =>
       lists.map(entry =>
         entry.id === listId
-          ? { ...entry, items: entry.items.map(todo => (todo.id === itemId ? { ...todo, text, notificationId } : todo)) }
+          ? {
+              ...entry,
+              items: entry.items.map(todo =>
+                todo.id === itemId
+                  ? syncLinkedEventForTodo(listId, list.folderId, { ...todo, text, notificationId })
+                  : todo
+              ),
+            }
           : entry
       )
     );
@@ -610,7 +728,23 @@ export default function App() {
     );
     setTodoLists(lists => lists.filter(entry => entry.id !== listId));
     setCalendarEvents(events => events.filter(event => event.todoListId !== listId));
-    if (todoFocusListId === listId) setTodoFocusListId(null);
+    if (todoFocusListId === listId) {
+      setTodoFocusListId(null);
+      setToastMessage('List deleted.');
+    }
+
+    const siblingCount = todoLists.filter(entry => entry.folderId === list.folderId && entry.id !== listId).length;
+    const parentFolder = findNode(todoTree, list.folderId);
+    if (parentFolder && parentFolder.id !== 'root' && siblingCount === 0 && parentFolder.children.length === 0) {
+      Alert.alert(
+        'Delete empty category too?',
+        `Category "${parentFolder.name}" is now empty. Delete it too?`,
+        [
+          { text: 'No', style: 'cancel' },
+          { text: 'Yes', style: 'destructive', onPress: () => deleteTodoCategory(parentFolder.id) },
+        ]
+      );
+    }
   };
 
   const deleteTodoCategory = async (folderId: string) => {
@@ -635,8 +769,14 @@ export default function App() {
           !listsToDelete.some(list => list.id === event.todoListId)
       )
     );
-    if (todoFocusFolderId && descendantIds.has(todoFocusFolderId)) setTodoFocusFolderId(null);
-    if (todoFocusListId && listsToDelete.some(list => list.id === todoFocusListId)) setTodoFocusListId(null);
+    if (todoFocusFolderId && descendantIds.has(todoFocusFolderId)) {
+      setTodoFocusFolderId(null);
+      setToastMessage('Category deleted.');
+    }
+    if (todoFocusListId && listsToDelete.some(list => list.id === todoFocusListId)) {
+      setTodoFocusListId(null);
+      setToastMessage('List deleted.');
+    }
   };
 
   const addManualTodoItem = (listId: string, text: string) => {
@@ -648,6 +788,7 @@ export default function App() {
       due: null,
       reminderAt: null,
       notificationId: null,
+      eventId: null,
       done: false,
       ts: Date.now(),
       fromNote: null,
@@ -686,7 +827,14 @@ export default function App() {
           ? {
               ...entry,
               items: entry.items.map(todo =>
-                todo.id === target.itemId ? { ...todo, reminderAt, notificationId, due: dueLabel } : todo
+                todo.id === target.itemId
+                  ? syncLinkedEventForTodo(target.listId, target.folderId, {
+                      ...todo,
+                      reminderAt,
+                      notificationId,
+                      due: dueLabel,
+                    })
+                  : todo
               ),
             }
           : entry
@@ -724,7 +872,26 @@ export default function App() {
     setNotes(current =>
       current.map(note => (folderIds.has(note.folderId) ? { ...note, folderId: ensured.id } : note))
     );
-    if (openFolder && folderIds.has(openFolder.id)) setOpenFolder(null);
+    if (openFolder && folderIds.has(openFolder.id)) {
+      setOpenFolder(null);
+      setToastMessage('Category deleted.');
+    }
+  };
+
+  const renameKeeperCategory = (folderId: string, name: string) => {
+    setKeeperTree(current => renameFolder(current, folderId, name));
+  };
+
+  const deleteKeeperCategory = (folderId: string) => {
+    const target = findNode(keeperTree, folderId);
+    if (!target) return;
+    const descendantIds = collectFolderIds(target);
+    const uncategorized = ensureFolder(keeperTree, 'Uncategorized', 'keeper-root');
+    const nextTree = deleteFolder(uncategorized.tree, folderId);
+    setKeeperTree(nextTree);
+    setKeeperItems(current =>
+      current.map(item => (descendantIds.has(item.categoryId) ? { ...item, categoryId: uncategorized.id } : item))
+    );
   };
 
   const currentReminder = reminderQueue[0] || null;
@@ -792,6 +959,8 @@ export default function App() {
         onDeleteItem={itemId => setKeeperItems(items => items.filter(item => item.id !== itemId))}
         onAddText={text => saveKeeperItem(text, null)}
         onRecord={startKeeperRecording}
+        onRenameCategory={renameKeeperCategory}
+        onDeleteCategory={deleteKeeperCategory}
       />
     );
   } else if (tab === 'todos') {
@@ -810,6 +979,8 @@ export default function App() {
         onOpenSourceNote={openSourceNote}
         onDeleteList={deleteTodoList}
         onDeleteCategory={deleteTodoCategory}
+        onRenameCategory={renameTodoCategory}
+        onChangeCategoryColor={changeTodoCategoryColor}
       />
     );
   } else if (tab === 'settings') {
@@ -817,12 +988,22 @@ export default function App() {
   } else {
     screen = (
       <CalendarScreen
+        todoTree={todoTree}
         events={calendarEvents}
         onOpenEvent={event => {
-          Alert.alert(event.title, event.allDay ? 'All day' : `${formatClockTime(event.startAt)} - ${formatClockTime(event.endAt)}`);
+          Alert.alert(
+            event.title,
+            event.allDay ? 'All day' : `${formatClockTime(event.startAt)} - ${formatClockTime(event.endAt)}`,
+            [
+              { text: 'Close', style: 'cancel' },
+              { text: 'Meeting', onPress: () => setCalendarEvents(events => events.map(entry => entry.id === event.id ? { ...entry, eventType: 'meeting' } : entry)) },
+              { text: 'Reminder', onPress: () => setCalendarEvents(events => events.map(entry => entry.id === event.id ? { ...entry, eventType: 'reminder' } : entry)) },
+              { text: 'Task', onPress: () => setCalendarEvents(events => events.map(entry => entry.id === event.id ? { ...entry, eventType: 'task' } : entry)) },
+            ]
+          );
         }}
         onRescheduleEvent={(eventId, startAt, endAt, allDay) => {
-          setCalendarEvents(events => events.map(event => (event.id === eventId ? { ...event, startAt, endAt, allDay } : event)));
+          updateScheduledItem(eventId, startAt, { durationMs: endAt - startAt });
         }}
       />
     );
@@ -833,6 +1014,11 @@ export default function App() {
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
       <View style={styles.inner}>
         {screen}
+        {toastMessage ? (
+          <View pointerEvents="none" style={styles.toast}>
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </View>
+        ) : null}
         {flow === 'idle' ? (
           <TabBar
             active={tab}
@@ -851,16 +1037,19 @@ export default function App() {
             <MaterialCommunityIcons name="microphone" size={26} color="#fff7f1" />
           </TouchableOpacity>
         ) : null}
-        {pending ? (
-          <ReviewScreen
-            visible
-            pending={pending}
-            tree={reviewTree}
-            todoLists={todoLists}
-            onApprove={approvePending}
-            onDiscard={discardPending}
-          />
-        ) : null}
+        {pending
+          ? (console.log('Review pending payload', pending),
+            (
+              <ReviewScreen
+                visible
+                pending={pending}
+                tree={reviewTree}
+                todoLists={todoLists}
+                onApprove={approvePending}
+                onDiscard={discardPending}
+              />
+            ))
+          : null}
         {currentReminder ? (
           <TodoReminderModal
             visible
@@ -985,5 +1174,23 @@ const styles = StyleSheet.create({
   },
   fabRight: {
     right: 18,
+  },
+  toast: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 86,
+    backgroundColor: 'rgba(58, 46, 31, 0.92)',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    zIndex: 40,
+    elevation: 8,
+  },
+  toastText: {
+    color: '#fff7f1',
+    textAlign: 'center',
+    fontSize: FONTS.size.sm,
+    fontWeight: '600',
   },
 });

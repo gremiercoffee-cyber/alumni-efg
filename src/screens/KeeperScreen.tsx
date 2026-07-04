@@ -12,6 +12,9 @@ import {
   Modal,
   TextInput,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import ActionSheetModal from '../components/ActionSheetModal';
+import NamePromptModal from '../components/NamePromptModal';
 import TopBar from '../components/TopBar';
 import { COLORS, FONTS } from '../constants';
 import { flattenFolders, folderPathLabel, formatDate } from '../utils';
@@ -25,6 +28,8 @@ interface Props {
   onDeleteItem: (itemId: string) => void;
   onAddText: (text: string) => void;
   onRecord: () => void;
+  onRenameCategory: (categoryId: string, name: string) => void;
+  onDeleteCategory: (categoryId: string) => void;
 }
 
 export default function KeeperScreen({
@@ -35,10 +40,15 @@ export default function KeeperScreen({
   onDeleteItem,
   onAddText,
   onRecord,
+  onRenameCategory,
+  onDeleteCategory,
 }: Props) {
   const [modalVisible, setModalVisible] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  const [categoryActions, setCategoryActions] = useState<{ id: string; name: string } | null>(null);
+  const [renameCategory, setRenameCategory] = useState<{ id: string; name: string } | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
   const [brokenFavicons, setBrokenFavicons] = useState<Record<string, boolean>>({});
   const categories = flattenFolders(keeperTree);
   const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
@@ -214,24 +224,45 @@ export default function KeeperScreen({
           <View style={styles.sidebar}>
             <Text style={styles.sidebarTitle}>Keeper categories</Text>
             {[{ id: 'all', name: 'All' }, ...categories.slice(1)].map(category => (
-              <TouchableOpacity
-                key={category.id}
-                style={[styles.sidebarItem, activeCategoryId === category.id && styles.sidebarItemActive]}
-                onPress={() => {
-                  setActiveCategoryId(category.id);
-                  setSidebarOpen(false);
-                }}
-                activeOpacity={0.82}
-              >
-                <Text
-                  style={[
-                    styles.sidebarItemText,
-                    activeCategoryId === category.id && styles.sidebarItemTextActive,
-                  ]}
+              <View key={category.id} style={[styles.sidebarItemRow, activeCategoryId === category.id && styles.sidebarItemActive]}>
+                <TouchableOpacity
+                  style={styles.sidebarItemButton}
+                  onPress={() => {
+                    setActiveCategoryId(category.id);
+                    setSidebarOpen(false);
+                  }}
+                  onLongPress={() => {
+                    if (category.id === 'all') return;
+                    setCategoryActions({ id: category.id, name: category.name });
+                  }}
+                  activeOpacity={0.82}
                 >
-                  {category.name}
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.sidebarItemText,
+                      activeCategoryId === category.id && styles.sidebarItemTextActive,
+                    ]}
+                  >
+                    {category.name}
+                  </Text>
+                </TouchableOpacity>
+                {category.id !== 'all' ? (
+                  <TouchableOpacity
+                    style={styles.sidebarEditBtn}
+                    onPress={() => {
+                      setRenameCategory({ id: category.id, name: category.name });
+                      setRenameDraft(category.name);
+                    }}
+                    activeOpacity={0.82}
+                  >
+                    <MaterialCommunityIcons
+                      name="pencil"
+                      size={15}
+                      color={activeCategoryId === category.id ? COLORS.bg : COLORS.brownLight}
+                    />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             ))}
           </View>
         </View>
@@ -267,6 +298,63 @@ export default function KeeperScreen({
           </View>
         </View>
       </Modal>
+
+      <ActionSheetModal
+        visible={!!categoryActions}
+        title={categoryActions?.name || 'Category'}
+        message="Choose an action"
+        options={[
+          {
+            label: 'Rename',
+            onPress: () => {
+              if (!categoryActions) return;
+              setRenameCategory(categoryActions);
+              setRenameDraft(categoryActions.name);
+              setCategoryActions(null);
+            },
+          },
+          {
+            label: 'Delete',
+            destructive: true,
+            onPress: () => {
+              if (!categoryActions) return;
+              const itemCount = items.filter(item => item.categoryId === categoryActions.id).length;
+              const target = categoryActions.id;
+              setCategoryActions(null);
+              Alert.alert(
+                'Delete this category?',
+                itemCount
+                  ? `This will move ${itemCount} item${itemCount === 1 ? '' : 's'} to Uncategorized.`
+                  : 'Delete this empty category?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete', style: 'destructive', onPress: () => onDeleteCategory(target) },
+                ]
+              );
+            },
+          },
+        ]}
+        onCancel={() => setCategoryActions(null)}
+      />
+
+      <NamePromptModal
+        visible={!!renameCategory}
+        title="Rename category"
+        placeholder="Category name"
+        value={renameDraft}
+        onChangeText={setRenameDraft}
+        onConfirm={() => {
+          const trimmed = renameDraft.trim();
+          if (!trimmed || !renameCategory) return;
+          onRenameCategory(renameCategory.id, trimmed);
+          setRenameCategory(null);
+          setRenameDraft('');
+        }}
+        onCancel={() => {
+          setRenameCategory(null);
+          setRenameDraft('');
+        }}
+      />
     </View>
   );
 }
@@ -494,10 +582,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sidebarItem: {
+    backgroundColor: COLORS.brown,
+  },
+  sidebarItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderRadius: 12,
+    marginBottom: 6,
+  },
+  sidebarItemButton: {
+    flex: 1,
     paddingHorizontal: 12,
     paddingVertical: 11,
-    marginBottom: 6,
   },
   sidebarItemActive: {
     backgroundColor: COLORS.brown,
@@ -509,6 +605,14 @@ const styles = StyleSheet.create({
   sidebarItemTextActive: {
     color: COLORS.bg,
     fontWeight: '700',
+  },
+  sidebarEditBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   modalOverlay: {
     flex: 1,

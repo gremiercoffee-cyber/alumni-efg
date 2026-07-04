@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import TopBar from '../components/TopBar';
+import ActionSheetModal from '../components/ActionSheetModal';
+import NamePromptModal from '../components/NamePromptModal';
 import SpeakButton from '../components/SpeakButton';
 import { COLORS, FONTS } from '../constants';
 import { formatDate } from '../utils';
@@ -30,6 +32,9 @@ export default function FolderDetailScreen({
   onRenameFolder,
   onDeleteFolder,
 }: Props) {
+  const [actionFolder, setActionFolder] = useState<{ id: string; name: string } | null>(null);
+  const [renameFolderState, setRenameFolderState] = useState<{ id: string; name: string } | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
   const folderIds = new Set<string>();
   function collectIds(node: FolderNode) {
     folderIds.add(node.id);
@@ -38,13 +43,17 @@ export default function FolderDetailScreen({
   collectIds(folder);
 
   const folderNotes = notes.filter(n => folderIds.has(n.folderId));
-
-  const showActions = () => {
-    Alert.alert(folder.name, 'Choose an action', [
-      { text: 'Rename', onPress: () => onRenameFolder(folder.id, folder.name) },
-      { text: 'Delete', style: 'destructive', onPress: () => onDeleteFolder(folder.id) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+  const openRename = (folderId: string, name: string) => {
+    setRenameFolderState({ id: folderId, name });
+    setRenameDraft(name);
+    setActionFolder(null);
+  };
+  const submitRename = () => {
+    const trimmed = renameDraft.trim();
+    if (!trimmed || !renameFolderState) return;
+    onRenameFolder(renameFolderState.id, trimmed);
+    setRenameFolderState(null);
+    setRenameDraft('');
   };
 
   return (
@@ -52,7 +61,11 @@ export default function FolderDetailScreen({
       <TopBar subtitle="Notes" title={folder.name} onBack={onBack} />
 
       <View style={styles.headerActionRow}>
-        <TouchableOpacity style={styles.headerActionBtn} onPress={showActions} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.headerActionBtn}
+          onPress={() => setActionFolder({ id: folder.id, name: folder.name })}
+          activeOpacity={0.8}
+        >
           <Text style={styles.headerActionText}>Rename or delete category</Text>
         </TouchableOpacity>
       </View>
@@ -64,13 +77,7 @@ export default function FolderDetailScreen({
               key={c.id}
               style={styles.subfolderChip}
               onPress={() => onOpenFolder(c)}
-              onLongPress={() =>
-                Alert.alert(c.name, 'Choose an action', [
-                  { text: 'Rename', onPress: () => onRenameFolder(c.id, c.name) },
-                  { text: 'Delete', style: 'destructive', onPress: () => onDeleteFolder(c.id) },
-                  { text: 'Cancel', style: 'cancel' },
-                ])
-              }
+              onLongPress={() => setActionFolder({ id: c.id, name: c.name })}
               activeOpacity={0.8}
             >
               <Text style={styles.subfolderText}>{c.name}</Text>
@@ -108,6 +115,63 @@ export default function FolderDetailScreen({
           ))
         )}
       </ScrollView>
+
+      <ActionSheetModal
+        visible={!!actionFolder}
+        title={actionFolder?.name || 'Category'}
+        message="Choose an action"
+        options={[
+          { label: 'Rename', onPress: () => actionFolder && openRename(actionFolder.id, actionFolder.name) },
+          {
+            label: 'Delete',
+            destructive: true,
+            onPress: () => {
+              if (!actionFolder) return;
+              const folderId = actionFolder.id;
+              const targetName = actionFolder.name;
+              const targetNode = actionFolder.id === folder.id
+                ? folder
+                : folder.children.find(child => child.id === actionFolder.id) || null;
+              const noteCount = targetNode
+                ? notes.filter(note => {
+                    const ids = new Set<string>();
+                    const visit = (node: FolderNode) => {
+                      ids.add(node.id);
+                      node.children.forEach(visit);
+                    };
+                    visit(targetNode);
+                    return ids.has(note.folderId);
+                  }).length
+                : 0;
+              setActionFolder(null);
+              Alert.alert(
+                'Delete this category?',
+                noteCount
+                  ? `This folder contains ${noteCount} note${noteCount === 1 ? '' : 's'}. Deleting it will move them to Miscellaneous.`
+                  : `Delete "${targetName}"?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete', style: 'destructive', onPress: () => onDeleteFolder(folderId) },
+                ]
+              );
+            },
+          },
+        ]}
+        onCancel={() => setActionFolder(null)}
+      />
+
+      <NamePromptModal
+        visible={!!renameFolderState}
+        title="Rename category"
+        placeholder="Category name"
+        value={renameDraft}
+        onChangeText={setRenameDraft}
+        onConfirm={submitRename}
+        onCancel={() => {
+          setRenameFolderState(null);
+          setRenameDraft('');
+        }}
+      />
     </View>
   );
 }

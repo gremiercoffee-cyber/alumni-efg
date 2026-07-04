@@ -8,9 +8,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import ActionSheetModal from '../components/ActionSheetModal';
+import NamePromptModal from '../components/NamePromptModal';
 import TopBar from '../components/TopBar';
-import { COLORS, FONTS } from '../constants';
-import { formatReminderLabel } from '../utils';
+import { COLORS, FONTS, TODO_CATEGORY_PALETTE } from '../constants';
+import { formatReminderLabel, tintColor } from '../utils';
 import { FolderNode, TodoItem, TodoList } from '../types';
 
 interface Props {
@@ -27,6 +29,8 @@ interface Props {
   onOpenSourceNote: (noteId: string) => void;
   onDeleteList: (listId: string) => void | Promise<void>;
   onDeleteCategory: (folderId: string) => void | Promise<void>;
+  onRenameCategory: (folderId: string, title: string) => void;
+  onChangeCategoryColor: (folderId: string, color: string) => void;
 }
 
 function collectFolderIds(node: FolderNode, ids = new Set<string>()): Set<string> {
@@ -166,6 +170,7 @@ function TodoListSection({
   onDeleteList,
   completedExpanded,
   onToggleCompletedExpanded,
+  accentColor,
 }: {
   list: TodoList;
   focused: boolean;
@@ -181,12 +186,14 @@ function TodoListSection({
   onDeleteList: (listId: string) => void | Promise<void>;
   completedExpanded: boolean;
   onToggleCompletedExpanded: () => void;
+  accentColor: string | null;
 }) {
   const [draft, setDraft] = useState('');
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [editingListTitle, setEditingListTitle] = useState(false);
   const [listTitleDraft, setListTitleDraft] = useState(list.title);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const inputRef = useRef<TextInput | null>(null);
   const activeItems = list.items.filter(item => !item.done);
   const completedItems = list.items.filter(item => item.done);
@@ -238,20 +245,17 @@ function TodoListSection({
   };
 
   return (
-    <View style={[styles.listCard, focused && styles.listFocused]}>
+    <View
+      style={[
+        styles.listCard,
+        focused && styles.listFocused,
+        accentColor ? { borderLeftWidth: 4, borderLeftColor: accentColor } : null,
+      ]}
+    >
       <TouchableOpacity
         style={styles.listHeader}
         onPress={onToggleExpanded}
-        onLongPress={() =>
-          Alert.alert(
-            'Delete this list?',
-            `This will delete ${list.items.length} to-do item${list.items.length === 1 ? '' : 's'}. Continue?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Delete list', style: 'destructive', onPress: () => onDeleteList(list.id) },
-            ]
-          )
-        }
+        onLongPress={() => setActionsOpen(true)}
         delayLongPress={240}
         activeOpacity={0.85}
       >
@@ -354,6 +358,37 @@ function TodoListSection({
           ) : null}
         </View>
       ) : null}
+
+      <ActionSheetModal
+        visible={actionsOpen}
+        title={list.title}
+        message="Choose an action"
+        options={[
+          {
+            label: 'Rename',
+            onPress: () => {
+              setActionsOpen(false);
+              setEditingListTitle(true);
+            },
+          },
+          {
+            label: 'Delete',
+            destructive: true,
+            onPress: () => {
+              setActionsOpen(false);
+              Alert.alert(
+                'Delete this list?',
+                `This will delete ${list.items.length} item${list.items.length === 1 ? '' : 's'}. Continue?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete list', style: 'destructive', onPress: () => onDeleteList(list.id) },
+                ]
+              );
+            },
+          },
+        ]}
+        onCancel={() => setActionsOpen(false)}
+      />
     </View>
   );
 }
@@ -378,6 +413,8 @@ function FolderSection({
   onOpenSourceNote,
   onDeleteCategory,
   onDeleteList,
+  onRenameCategory,
+  onChangeCategoryColor,
 }: {
   folder: FolderNode;
   todoLists: TodoList[];
@@ -398,6 +435,8 @@ function FolderSection({
   onOpenSourceNote: (noteId: string) => void;
   onDeleteCategory: (folderId: string) => void | Promise<void>;
   onDeleteList: (listId: string) => void | Promise<void>;
+  onRenameCategory: (folderId: string, title: string) => void;
+  onChangeCategoryColor: (folderId: string, color: string) => void;
 }) {
   const descendantIds = useMemo(() => Array.from(collectFolderIds(folder)), [folder]);
   const listsInFolder = todoLists.filter(list => list.folderId === folder.id);
@@ -409,13 +448,23 @@ function FolderSection({
     .reduce((sum, list) => sum + list.items.filter(item => !item.done).length, 0);
   const expanded = expandedFolders[folder.id] ?? true;
   const isFocused = focusedFolderId === folder.id;
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameDraft, setRenameDraft] = useState(folder.name);
+  const accentColor = folder.color || null;
 
   if (listsInFolder.length === 0 && childFolders.length === 0) {
     return null;
   }
 
   return (
-    <View style={[styles.folderSection, isFocused && styles.folderSectionFocused]}>
+    <View
+      style={[
+        styles.folderSection,
+        isFocused && styles.folderSectionFocused,
+        accentColor ? { borderColor: accentColor, backgroundColor: tintColor(accentColor, '14') } : null,
+      ]}
+    >
       <TouchableOpacity
         style={styles.folderHeader}
         onPress={() =>
@@ -424,21 +473,18 @@ function FolderSection({
             [folder.id]: !(current[folder.id] ?? true),
           }))
         }
-        onLongPress={() =>
-          Alert.alert(
-            'Delete this category?',
-            `This will delete ${openCount} to-do item${openCount === 1 ? '' : 's'}. Continue?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Delete category', style: 'destructive', onPress: () => onDeleteCategory(folder.id) },
-            ]
-          )
-        }
+        onLongPress={() => {
+          setRenameDraft(folder.name);
+          setActionsOpen(true);
+        }}
         delayLongPress={240}
         activeOpacity={0.85}
       >
         <View style={styles.folderHeaderTextWrap}>
-          <Text style={styles.folderTitle}>{folder.name}</Text>
+          <View style={styles.folderTitleRow}>
+            {accentColor ? <View style={[styles.folderColorDot, { backgroundColor: accentColor }]} /> : null}
+            <Text style={styles.folderTitle}>{folder.name}</Text>
+          </View>
           <Text style={styles.folderMeta}>
             {openCount} open{listsInFolder.length ? ` · ${listsInFolder.length} list${listsInFolder.length === 1 ? '' : 's'}` : ''}
           </Text>
@@ -468,6 +514,7 @@ function FolderSection({
               onDeleteItem={onDeleteItem}
               onOpenSourceNote={onOpenSourceNote}
               onDeleteList={onDeleteList}
+              accentColor={accentColor}
               completedExpanded={!!expandedCompleted[list.id]}
               onToggleCompletedExpanded={() =>
                 setExpandedCompleted(current => ({
@@ -500,11 +547,82 @@ function FolderSection({
                 onOpenSourceNote={onOpenSourceNote}
                 onDeleteCategory={onDeleteCategory}
                 onDeleteList={onDeleteList}
+                onRenameCategory={onRenameCategory}
+                onChangeCategoryColor={onChangeCategoryColor}
               />
             </View>
           ))}
         </View>
       ) : null}
+
+      <ActionSheetModal
+        visible={actionsOpen}
+        title={folder.name}
+        message="Choose an action"
+        options={[
+          {
+            label: 'Rename',
+            onPress: () => {
+              setActionsOpen(false);
+              setRenameOpen(true);
+            },
+          },
+          {
+            label: 'Change color',
+            onPress: () => {
+              setActionsOpen(false);
+              Alert.alert(
+                'Change category color',
+                undefined,
+                TODO_CATEGORY_PALETTE.map(color => ({
+                  text: color,
+                  onPress: () => onChangeCategoryColor(folder.id, color),
+                })).concat([{ text: 'Cancel', style: 'cancel' }])
+              );
+            },
+          },
+          {
+            label: 'Delete',
+            destructive: true,
+            onPress: () => {
+              setActionsOpen(false);
+              const listCount = todoLists.filter(list => descendantIds.includes(list.folderId)).length;
+              const itemCount = todoLists
+                .filter(list => descendantIds.includes(list.folderId))
+                .reduce((sum, list) => sum + list.items.length, 0);
+              Alert.alert(
+                'Delete this category?',
+                listCount || itemCount
+                  ? `This will delete ${listCount} list${listCount === 1 ? '' : 's'} and ${itemCount} item${itemCount === 1 ? '' : 's'}. Continue?`
+                  : 'Delete this empty category?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete category', style: 'destructive', onPress: () => onDeleteCategory(folder.id) },
+                ]
+              );
+            },
+          },
+        ]}
+        onCancel={() => setActionsOpen(false)}
+      />
+
+      <NamePromptModal
+        visible={renameOpen}
+        title="Rename category"
+        placeholder="Category name"
+        value={renameDraft}
+        onChangeText={setRenameDraft}
+        onConfirm={() => {
+          const trimmed = renameDraft.trim();
+          if (!trimmed) return;
+          onRenameCategory(folder.id, trimmed);
+          setRenameOpen(false);
+        }}
+        onCancel={() => {
+          setRenameOpen(false);
+          setRenameDraft(folder.name);
+        }}
+      />
     </View>
   );
 }
@@ -523,6 +641,8 @@ export default function ToDosScreen({
   onOpenSourceNote,
   onDeleteList,
   onDeleteCategory,
+  onRenameCategory,
+  onChangeCategoryColor,
 }: Props) {
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [expandedLists, setExpandedLists] = useState<Record<string, boolean>>({});
@@ -623,6 +743,7 @@ export default function ToDosScreen({
                     onDeleteItem={onDeleteItem}
                     onOpenSourceNote={onOpenSourceNote}
                     onDeleteList={onDeleteList}
+                    accentColor={null}
                     completedExpanded={!!expandedCompleted[list.id]}
                     onToggleCompletedExpanded={() =>
                       setExpandedCompleted(current => ({
@@ -657,6 +778,8 @@ export default function ToDosScreen({
                 onOpenSourceNote={onOpenSourceNote}
                 onDeleteCategory={onDeleteCategory}
                 onDeleteList={onDeleteList}
+                onRenameCategory={onRenameCategory}
+                onChangeCategoryColor={onChangeCategoryColor}
               />
             ))}
           </>
@@ -744,6 +867,16 @@ const styles = StyleSheet.create({
   folderHeaderTextWrap: {
     flex: 1,
     paddingRight: 10,
+  },
+  folderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  folderColorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   folderTitle: {
     fontSize: FONTS.size.md,

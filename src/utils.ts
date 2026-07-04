@@ -1,4 +1,5 @@
 import { CalendarEvent, FolderNode, FlatFolder } from './types';
+import { TODO_CATEGORY_PALETTE } from './constants';
 
 export function flattenFolders(node: FolderNode, path: string[] = []): FlatFolder[] {
   const here: FlatFolder = {
@@ -26,7 +27,8 @@ export function addChildFolder(
   tree: FolderNode,
   parentId: string,
   name: string,
-  prefix = 'f'
+  prefix = 'f',
+  color?: string | null
 ): { tree: FolderNode; id: string } {
   const newTree: FolderNode = JSON.parse(JSON.stringify(tree));
   const parent = findNode(newTree, parentId) || newTree;
@@ -36,7 +38,7 @@ export function addChildFolder(
     '-' +
     Math.random().toString(36).slice(2, 6);
   parent.children = parent.children || [];
-  parent.children.push({ id, name, children: [] });
+  parent.children.push({ id, name, children: [], color: color ?? null });
   return { tree: newTree, id };
 }
 
@@ -130,13 +132,39 @@ export function deleteFolder(
 export function ensureFolder(
   tree: FolderNode,
   folderName: string,
-  parentId = 'root'
+  parentId = 'root',
+  color?: string | null
 ): { tree: FolderNode; id: string } {
   const existing = findFolderByName(tree, folderName);
   if (existing) {
     return { tree, id: existing.id };
   }
-  return addChildFolder(tree, parentId, folderName);
+  return addChildFolder(tree, parentId, folderName, 'f', color);
+}
+
+export function assignCategoryColor(tree: FolderNode, folderId: string, color: string): FolderNode {
+  const newTree: FolderNode = JSON.parse(JSON.stringify(tree));
+  const target = findNode(newTree, folderId);
+  if (target) target.color = color;
+  return newTree;
+}
+
+export function nextCategoryColor(tree: FolderNode): string {
+  const used = flattenFolders(tree)
+    .map(folder => findNode(tree, folder.id)?.color)
+    .filter((color): color is string => !!color);
+  return TODO_CATEGORY_PALETTE[used.length % TODO_CATEGORY_PALETTE.length];
+}
+
+export function getFolderColor(tree: FolderNode, folderId: string | null | undefined): string | null {
+  if (!folderId) return null;
+  return findNode(tree, folderId)?.color || null;
+}
+
+export function tintColor(hex: string, alpha: string): string {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return hex;
+  return `#${clean}${alpha}`;
 }
 
 export function extractFirstUrl(text: string): string | null {
@@ -185,6 +213,11 @@ export function parseSuggestedReminder(input: string | null): number | null {
   if (!input) return null;
   const value = input.trim().toLowerCase();
   if (!value) return null;
+
+  const directParsed = parseNaturalDateTime(input, null);
+  if (directParsed && !directParsed.allDay) {
+    return directParsed.startAt;
+  }
 
   const now = new Date();
   const base = new Date(now);
@@ -296,10 +329,19 @@ export function parseNaturalDateTime(
   timeText: string | null
 ): { startAt: number; endAt: number; allDay: boolean } | null {
   const now = new Date();
-  const baseDate = parseRelativeDate(dateText) || startOfDay(now);
+  const combined = [dateText, timeText].filter(Boolean).join(' ').trim();
+  const direct = combined ? Date.parse(combined) : Number.NaN;
+  if (!Number.isNaN(direct)) {
+    const start = new Date(direct);
+    const end = new Date(start);
+    end.setMinutes(end.getMinutes() + 60);
+    return { startAt: start.getTime(), endAt: end.getTime(), allDay: false };
+  }
+
+  const baseDate = parseRelativeDate(dateText || combined) || startOfDay(now);
   if (!baseDate) return null;
 
-  const time = parseTimeOfDay(timeText);
+  const time = parseTimeOfDay(timeText || combined);
   if (!time) {
     const start = new Date(baseDate);
     start.setHours(0, 0, 0, 0);
@@ -344,8 +386,8 @@ function parseRelativeDate(input: string | null): Date | null {
 
   const lowered = value.toLowerCase();
   const today = startOfDay(new Date());
-  if (lowered === 'today') return today;
-  if (lowered === 'tomorrow') return addDays(today, 1);
+  if (lowered.includes('today')) return today;
+  if (lowered.includes('tomorrow')) return addDays(today, 1);
 
   const weekdayMap: Record<string, number> = {
     sunday: 0,
@@ -368,7 +410,7 @@ function parseRelativeDate(input: string | null): Date | null {
     if (lowered.includes(label)) {
       const next = new Date(today);
       const diff = (day - next.getDay() + 7) % 7;
-      next.setDate(next.getDate() + diff);
+      next.setDate(next.getDate() + (diff === 0 ? 7 : diff));
       return next;
     }
   }
