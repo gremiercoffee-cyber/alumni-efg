@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
+  Modal,
   Platform,
   SafeAreaView,
   StatusBar,
@@ -13,7 +14,6 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import RecordingScreen from './src/screens/RecordingScreen';
-import CallPromptScreen from './src/screens/CallPromptScreen';
 import ProcessingScreen from './src/screens/ProcessingScreen';
 import ReviewScreen from './src/screens/ReviewScreen';
 import FoldersScreen from './src/screens/FoldersScreen';
@@ -50,7 +50,7 @@ import {
   renameFolder,
   withDuration,
 } from './src/utils';
-import { EMPTY_KEEPER_TREE, EMPTY_TREE, COLORS } from './src/constants';
+import { EMPTY_KEEPER_TREE, EMPTY_TREE, COLORS, FONTS } from './src/constants';
 import type {
   CalendarEvent,
   FolderNode,
@@ -64,7 +64,7 @@ import type {
 } from './src/types';
 
 export type Tab = 'schedule' | 'notes' | 'keeper' | 'todos' | 'settings';
-export type Flow = 'idle' | 'callPrompt' | 'recording' | 'processing';
+export type Flow = 'idle' | 'recording' | 'processing';
 type CaptureTarget = 'general' | 'keeper';
 
 interface ReminderQueueItem {
@@ -121,6 +121,7 @@ export default function App() {
   const [openFolder, setOpenFolder] = useState<FolderNode | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recordModeSheetOpen, setRecordModeSheetOpen] = useState(false);
   const [keeperProcessing, setKeeperProcessing] = useState(false);
   const [todoFocusFolderId, setTodoFocusFolderId] = useState<string | null>(null);
   const [todoFocusListId, setTodoFocusListId] = useState<string | null>(null);
@@ -256,11 +257,16 @@ export default function App() {
     }
   };
 
-  const startRecording = () => {
+  const startQuickCapture = () => {
     setCaptureTarget('general');
     setCallMode(false);
     setError(null);
     setFlow('recording');
+  };
+
+  const openRecordingChooser = () => {
+    setError(null);
+    setRecordModeSheetOpen(true);
   };
 
   const startKeeperRecording = () => {
@@ -271,15 +277,10 @@ export default function App() {
     setFlow('recording');
   };
 
-  const startCallPrompt = () => {
-    setCaptureTarget('general');
-    setError(null);
-    setFlow('callPrompt');
-  };
-
-  const confirmCallRecording = () => {
+  const startMeetingCapture = () => {
     setCaptureTarget('general');
     setCallMode(true);
+    setRecordModeSheetOpen(false);
     setFlow('recording');
   };
 
@@ -703,9 +704,7 @@ export default function App() {
   const placeFabLeft = tab === 'notes';
 
   let screen: React.ReactNode;
-  if (flow === 'callPrompt') {
-    screen = <CallPromptScreen onConfirm={confirmCallRecording} onCancel={() => setFlow('idle')} />;
-  } else if (flow === 'recording') {
+  if (flow === 'recording') {
     screen = (
       <RecordingScreen
         callMode={callMode}
@@ -804,7 +803,7 @@ export default function App() {
         {showFloatingMic ? (
           <TouchableOpacity
             style={[styles.fab, placeFabLeft ? styles.fabLeft : styles.fabRight]}
-            onPress={startRecording}
+            onPress={openRecordingChooser}
             activeOpacity={0.88}
           >
             <MaterialCommunityIcons name="microphone" size={26} color="#fff7f1" />
@@ -830,6 +829,46 @@ export default function App() {
             onSave={timestamp => updateTodoReminder(currentReminder, timestamp)}
           />
         ) : null}
+        <Modal
+          visible={recordModeSheetOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setRecordModeSheetOpen(false)}
+        >
+          <View style={styles.sheetScrim}>
+            <TouchableOpacity
+              style={styles.sheetDismissArea}
+              activeOpacity={1}
+              onPress={() => setRecordModeSheetOpen(false)}
+            />
+            <View style={styles.sheet}>
+              <Text style={styles.sheetTitle}>Choose a recording type</Text>
+              <TouchableOpacity
+                style={styles.sheetOption}
+                onPress={() => {
+                  setRecordModeSheetOpen(false);
+                  startQuickCapture();
+                }}
+                activeOpacity={0.86}
+              >
+                <Text style={styles.sheetOptionTitle}>Quick note / To-do</Text>
+                <Text style={styles.sheetOptionText}>
+                  Short capture for a note, checklist, or quick thought.
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sheetOption}
+                onPress={startMeetingCapture}
+                activeOpacity={0.86}
+              >
+                <Text style={styles.sheetOptionTitle}>Record a meeting</Text>
+                <Text style={styles.sheetOptionText}>
+                  Longer recording with transcript, summary, and action items. It keeps recording if you switch apps.
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -842,6 +881,47 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   inner: { flex: 1 },
+  sheetScrim: {
+    flex: 1,
+    backgroundColor: 'rgba(45, 36, 29, 0.28)',
+    justifyContent: 'flex-end',
+  },
+  sheetDismissArea: {
+    flex: 1,
+  },
+  sheet: {
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 26,
+    gap: 12,
+  },
+  sheetTitle: {
+    color: COLORS.brown,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  sheetOption: {
+    backgroundColor: COLORS.white50,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 18,
+    padding: 16,
+  },
+  sheetOptionTitle: {
+    color: COLORS.brown,
+    fontSize: FONTS.size.lg,
+    fontWeight: '700',
+  },
+  sheetOptionText: {
+    color: COLORS.brownLight,
+    fontSize: FONTS.size.sm,
+    lineHeight: 20,
+    marginTop: 6,
+  },
   fab: {
     position: 'absolute',
     bottom: 76,
