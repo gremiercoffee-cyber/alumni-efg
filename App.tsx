@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import RecordingScreen from './src/screens/RecordingScreen';
 import CallPromptScreen from './src/screens/CallPromptScreen';
@@ -801,7 +802,7 @@ export default function App() {
         ) : null}
         {showFloatingMic ? (
           <TouchableOpacity style={styles.fab} onPress={startRecording} activeOpacity={0.88}>
-            <Text style={styles.fabIcon}>Mic</Text>
+            <MaterialCommunityIcons name="microphone" size={26} color="#fff7f1" />
           </TouchableOpacity>
         ) : null}
         {pending ? (
@@ -840,9 +841,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 18,
     bottom: 76,
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: COLORS.red,
     alignItems: 'center',
     justifyContent: 'center',
@@ -852,10 +853,5 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
     zIndex: 20,
-  },
-  fabIcon: {
-    color: '#fff7f1',
-    fontWeight: '700',
-    fontSize: 15,
   },
 });
