@@ -16,6 +16,25 @@ export interface ActionItem {
   done: boolean;
 }
 
+export interface EventSourceNote {
+  noteId: string;
+  noteTitle: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  startAt: number;
+  endAt: number;
+  allDay: boolean;
+  categoryFolderId: string | null;
+  todoListId: string | null;
+  todoItemId: string | null;
+  sourceNote: EventSourceNote | null;
+  kind: 'calendar' | 'action_item';
+  ts: number;
+}
+
 export interface Note {
   id: string;
   title: string;
@@ -35,7 +54,7 @@ export interface PendingActionItem {
 
 export interface BasePendingCapture {
   id: string;
-  contentType: 'note' | 'todo_items';
+  contentType: 'note' | 'todo_items' | 'calendar_entries';
   title: string;
   summary: string;
   transcript: string;
@@ -55,7 +74,19 @@ export interface PendingTodoCapture extends BasePendingCapture {
   todoItems: { text: string; due: string | null }[];
 }
 
-export type PendingCapture = PendingNote | PendingTodoCapture;
+export interface PendingCalendarEntry {
+  title: string;
+  date: string | null;
+  time: string | null;
+  durationMinutes: number | null;
+}
+
+export interface PendingCalendarCapture extends BasePendingCapture {
+  contentType: 'calendar_entries';
+  calendarEntries: PendingCalendarEntry[];
+}
+
+export type PendingCapture = PendingNote | PendingTodoCapture | PendingCalendarCapture;
 
 export interface KeeperItem {
   id: string;
@@ -76,6 +107,7 @@ export interface TodoItem {
   notificationId: string | null;
   done: boolean;
   ts: number;
+  fromNote: EventSourceNote | null;
 }
 
 export interface TodoList {

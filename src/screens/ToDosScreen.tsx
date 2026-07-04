@@ -24,6 +24,7 @@ interface Props {
   onRenameList: (listId: string, title: string) => void;
   onEditItem: (listId: string, itemId: string, text: string) => void | Promise<void>;
   onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
+  onOpenSourceNote: (noteId: string) => void;
 }
 
 function collectFolderIds(node: FolderNode, ids = new Set<string>()): Set<string> {
@@ -48,6 +49,7 @@ function TodoRow({
   onToggle,
   onEditReminder,
   onDeleteItem,
+  onOpenSourceNote,
   helperText,
 }: {
   item: TodoItem;
@@ -61,6 +63,7 @@ function TodoRow({
   onToggle: (listId: string, itemId: string) => void;
   onEditReminder: (listId: string, itemId: string) => void;
   onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
+  onOpenSourceNote: (noteId: string) => void;
   helperText?: string;
 }) {
   return (
@@ -106,6 +109,16 @@ function TodoRow({
           </TouchableOpacity>
         )}
 
+        {item.fromNote ? (
+          <TouchableOpacity
+            style={styles.sourcePill}
+            onPress={() => onOpenSourceNote(item.fromNote!.noteId)}
+            activeOpacity={0.82}
+          >
+            <Text style={styles.sourcePillText}>From note: {item.fromNote.noteTitle}</Text>
+          </TouchableOpacity>
+        ) : null}
+
         <View style={styles.rowActions}>
           <TouchableOpacity onPress={() => onEditReminder(listId, item.id)} activeOpacity={0.8}>
             <Text style={styles.rowActionText}>Reminder</Text>
@@ -145,6 +158,7 @@ function TodoListSection({
   onRenameList,
   onEditItem,
   onDeleteItem,
+  onOpenSourceNote,
   completedExpanded,
   onToggleCompletedExpanded,
 }: {
@@ -158,6 +172,7 @@ function TodoListSection({
   onRenameList: (listId: string, title: string) => void;
   onEditItem: (listId: string, itemId: string, text: string) => void | Promise<void>;
   onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
+  onOpenSourceNote: (noteId: string) => void;
   completedExpanded: boolean;
   onToggleCompletedExpanded: () => void;
 }) {
@@ -265,6 +280,7 @@ function TodoListSection({
                 onToggle={onToggle}
                 onEditReminder={onEditReminder}
                 onDeleteItem={onDeleteItem}
+                onOpenSourceNote={onOpenSourceNote}
               />
             ))
           )}
@@ -312,6 +328,7 @@ function TodoListSection({
                       onToggle={onToggle}
                       onEditReminder={onEditReminder}
                       onDeleteItem={onDeleteItem}
+                      onOpenSourceNote={onOpenSourceNote}
                       helperText="Tap the checkbox to move it back to active"
                     />
                   ))
@@ -341,6 +358,7 @@ function FolderSection({
   onRenameList,
   onEditItem,
   onDeleteItem,
+  onOpenSourceNote,
 }: {
   folder: FolderNode;
   todoLists: TodoList[];
@@ -358,6 +376,7 @@ function FolderSection({
   onRenameList: (listId: string, title: string) => void;
   onEditItem: (listId: string, itemId: string, text: string) => void | Promise<void>;
   onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
+  onOpenSourceNote: (noteId: string) => void;
 }) {
   const descendantIds = useMemo(() => Array.from(collectFolderIds(folder)), [folder]);
   const listsInFolder = todoLists.filter(list => list.folderId === folder.id);
@@ -415,6 +434,7 @@ function FolderSection({
               onRenameList={onRenameList}
               onEditItem={onEditItem}
               onDeleteItem={onDeleteItem}
+              onOpenSourceNote={onOpenSourceNote}
               completedExpanded={!!expandedCompleted[list.id]}
               onToggleCompletedExpanded={() =>
                 setExpandedCompleted(current => ({
@@ -444,6 +464,7 @@ function FolderSection({
                 onRenameList={onRenameList}
                 onEditItem={onEditItem}
                 onDeleteItem={onDeleteItem}
+                onOpenSourceNote={onOpenSourceNote}
               />
             </View>
           ))}
@@ -464,6 +485,7 @@ export default function ToDosScreen({
   onRenameList,
   onEditItem,
   onDeleteItem,
+  onOpenSourceNote,
 }: Props) {
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [expandedLists, setExpandedLists] = useState<Record<string, boolean>>({});
@@ -562,6 +584,7 @@ export default function ToDosScreen({
                     onRenameList={onRenameList}
                     onEditItem={onEditItem}
                     onDeleteItem={onDeleteItem}
+                    onOpenSourceNote={onOpenSourceNote}
                     completedExpanded={!!expandedCompleted[list.id]}
                     onToggleCompletedExpanded={() =>
                       setExpandedCompleted(current => ({
@@ -593,6 +616,7 @@ export default function ToDosScreen({
                 onRenameList={onRenameList}
                 onEditItem={onEditItem}
                 onDeleteItem={onDeleteItem}
+                onOpenSourceNote={onOpenSourceNote}
               />
             ))}
           </>
@@ -817,6 +841,18 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.xs,
     color: COLORS.red,
     marginTop: 6,
+  },
+  sourcePill: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    backgroundColor: 'rgba(181, 72, 47, 0.1)',
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  sourcePillText: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.red,
   },
   rowActions: {
     flexDirection: 'row',

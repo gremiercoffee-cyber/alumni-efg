@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FolderNode, Note, AppSettings, KeeperItem, TodoList } from './types';
+import { FolderNode, Note, AppSettings, KeeperItem, TodoList, CalendarEvent } from './types';
 
 const KEY = 'notekeeper:state:v2';
 const SETTINGS_KEY = 'notekeeper:settings:v1';
@@ -11,6 +11,7 @@ interface AppState {
   keeperTree?: FolderNode;
   notes?: Note[];
   keeperItems?: KeeperItem[];
+  calendarEvents?: CalendarEvent[];
   savedLinks?: Array<{
     id: string;
     url: string;
@@ -67,7 +68,12 @@ export async function loadAppState(): Promise<AppState | null> {
           ...item,
           reminderAt: item.reminderAt ?? null,
           notificationId: item.notificationId ?? null,
+          fromNote: item.fromNote ?? null,
         })),
+      })),
+      calendarEvents: (state.calendarEvents || []).map(event => ({
+        ...event,
+        sourceNote: event.sourceNote ?? null,
       })),
       keeperItems: state.keeperItems || migrateLegacyLinks(state.savedLinks || []),
       settings: mergeNonEmptySettings(recoveredSettings, state.settings || {}),

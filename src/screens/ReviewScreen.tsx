@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Modal,
   View,
   Text,
   ScrollView,
@@ -13,6 +14,7 @@ import { flattenFolders, folderPathLabel } from '../utils';
 import { FolderNode, PendingCapture, TodoList } from '../types';
 
 interface Props {
+  visible: boolean;
   pending: PendingCapture;
   tree: FolderNode;
   todoLists: TodoList[];
@@ -21,6 +23,7 @@ interface Props {
 }
 
 export default function ReviewScreen({
+  visible,
   pending,
   tree,
   todoLists,
@@ -30,6 +33,7 @@ export default function ReviewScreen({
   const [selectedFolder, setSelectedFolder] = useState<string | undefined>(undefined);
   const allFolders = flattenFolders(tree);
   const isTodo = pending.contentType === 'todo_items';
+  const isCalendar = pending.contentType === 'calendar_entries';
 
   const suggestedLabel = pending.existingFolderId
     ? folderPathLabel(pending.existingFolderId, allFolders)
@@ -44,9 +48,11 @@ export default function ReviewScreen({
     : null;
 
   return (
-    <View style={styles.container}>
-      <TopBar subtitle="Review" title={isTodo ? 'New to-dos' : 'New note'} />
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onDiscard}>
+      <View style={styles.modalScrim}>
+        <View style={styles.container}>
+          <TopBar subtitle="Review" title={isTodo ? 'New to-dos' : isCalendar ? 'New schedule items' : 'New note'} />
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <Text style={styles.title}>{pending.title}</Text>
           <Text style={styles.summary}>{pending.summary}</Text>
@@ -56,10 +62,14 @@ export default function ReviewScreen({
           <SpeakButton text={`${pending.title}. ${pending.summary}`} />
         </View>
 
-        <Text style={styles.sectionLabel}>{isTodo ? 'TO-DO CATEGORY' : 'NOTE CATEGORY'}</Text>
-        <View style={styles.folderPill}>
-          <Text style={styles.folderPillText}>{suggestedLabel}</Text>
-        </View>
+        {!isCalendar ? (
+          <>
+            <Text style={styles.sectionLabel}>{isTodo ? 'TO-DO CATEGORY' : 'NOTE CATEGORY'}</Text>
+            <View style={styles.folderPill}>
+              <Text style={styles.folderPillText}>{suggestedLabel}</Text>
+            </View>
+          </>
+        ) : null}
 
         {isTodo && (
           <>
@@ -70,7 +80,7 @@ export default function ReviewScreen({
           </>
         )}
 
-        {allFolders.length > 1 && (
+        {!isCalendar && allFolders.length > 1 && (
           <>
             <Text style={[styles.sectionLabel, { marginTop: 12 }]}>CHOOSE CATEGORY</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.folderScroll}>
@@ -98,7 +108,22 @@ export default function ReviewScreen({
           </>
         )}
 
-        {isTodo ? (
+        {isCalendar ? (
+          <>
+            <Text style={[styles.sectionLabel, { marginTop: 16 }]}>EVENTS</Text>
+            {pending.calendarEntries.map((entry, i) => (
+              <View key={i} style={styles.actionItem}>
+                <View style={styles.actionDot} />
+                <View style={styles.actionText}>
+                  <Text style={styles.actionItemText}>{entry.title}</Text>
+                  <Text style={styles.actionDue}>
+                    {[entry.date, entry.time].filter(Boolean).join(' at ') || 'All day today'}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </>
+        ) : isTodo ? (
           <>
             <Text style={[styles.sectionLabel, { marginTop: 16 }]}>TASKS</Text>
             {pending.todoItems.map((item, i) => (
@@ -138,26 +163,39 @@ export default function ReviewScreen({
           <Text style={styles.transcript}>{pending.transcript}</Text>
           <SpeakButton text={pending.transcript} />
         </View>
-      </ScrollView>
+          </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.discardBtn} onPress={onDiscard} activeOpacity={0.7}>
-          <Text style={styles.discardText}>Discard</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.approveBtn}
-          onPress={() => onApprove(selectedFolder)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.approveText}>{isTodo ? 'Add tasks' : 'Approve'}</Text>
-        </TouchableOpacity>
+          <View style={styles.footer}>
+            <TouchableOpacity style={styles.discardBtn} onPress={onDiscard} activeOpacity={0.7}>
+              <Text style={styles.discardText}>Discard</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.approveBtn}
+              onPress={() => onApprove(selectedFolder)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.approveText}>{isTodo ? 'Add tasks' : isCalendar ? 'Add events' : 'Approve'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
-    </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg },
+  modalScrim: {
+    flex: 1,
+    backgroundColor: 'rgba(45, 36, 29, 0.28)',
+    justifyContent: 'flex-end',
+  },
+  container: {
+    maxHeight: '92%',
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    overflow: 'hidden',
+  },
   scroll: { flex: 1 },
   content: { padding: 20, paddingBottom: 8 },
   hero: {

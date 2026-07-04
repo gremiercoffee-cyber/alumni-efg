@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Image,
+  Pressable,
   View,
   Text,
   TouchableOpacity,
@@ -36,24 +37,30 @@ export default function KeeperScreen({
   onRecord,
 }: Props) {
   const [modalVisible, setModalVisible] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [brokenFavicons, setBrokenFavicons] = useState<Record<string, boolean>>({});
   const categories = flattenFolders(keeperTree);
+  const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
   const itemCategoryLabels = useMemo(() => {
     return items.reduce<Record<string, string>>((acc, item) => {
       acc[item.id] = folderPathLabel(item.categoryId, categories);
       return acc;
     }, {});
   }, [items]);
+  const filteredItems = useMemo(
+    () => (activeCategoryId === 'all' ? items : items.filter(item => item.categoryId === activeCategoryId)),
+    [activeCategoryId, items]
+  );
   const columns = useMemo(() => {
-    return items.reduce<[KeeperItem[], KeeperItem[]]>(
+    return filteredItems.reduce<[KeeperItem[], KeeperItem[]]>(
       (acc, item, index) => {
         acc[index % 2].push(item);
         return acc;
       },
       [[], []]
     );
-  }, [items]);
+  }, [filteredItems]);
 
   const submitText = () => {
     const text = draft.trim();
@@ -91,6 +98,16 @@ export default function KeeperScreen({
   return (
     <View style={styles.container}>
       <TopBar subtitle={`${items.length} kept`} title="Keeper" />
+      <View style={styles.filterRow}>
+        <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarOpen(open => !open)} activeOpacity={0.82}>
+          <Text style={styles.menuBtnText}>≡</Text>
+        </TouchableOpacity>
+        <View style={styles.filterBadge}>
+          <Text style={styles.filterBadgeText}>
+            {activeCategoryId === 'all' ? 'All items' : folderPathLabel(activeCategoryId, categories)}
+          </Text>
+        </View>
+      </View>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <Text style={styles.heroCount}>{items.length}</Text>
@@ -116,9 +133,11 @@ export default function KeeperScreen({
           </View>
         )}
 
-        {items.length === 0 ? (
+        {filteredItems.length === 0 ? (
           <Text style={styles.empty}>
-            Add a link, a quick thought, or a dictated keep note and it will stay here by category.
+            {items.length === 0
+              ? 'Add a link, a quick thought, or a dictated keep note and it will stay here by category.'
+              : 'No Keeper items match this category yet.'}
           </Text>
         ) : (
           <View style={styles.grid}>
@@ -189,6 +208,35 @@ export default function KeeperScreen({
         )}
       </ScrollView>
 
+      {sidebarOpen ? (
+        <View style={styles.sidebarOverlay}>
+          <Pressable style={styles.sidebarDismiss} onPress={() => setSidebarOpen(false)} />
+          <View style={styles.sidebar}>
+            <Text style={styles.sidebarTitle}>Keeper categories</Text>
+            {[{ id: 'all', name: 'All' }, ...categories.slice(1)].map(category => (
+              <TouchableOpacity
+                key={category.id}
+                style={[styles.sidebarItem, activeCategoryId === category.id && styles.sidebarItemActive]}
+                onPress={() => {
+                  setActiveCategoryId(category.id);
+                  setSidebarOpen(false);
+                }}
+                activeOpacity={0.82}
+              >
+                <Text
+                  style={[
+                    styles.sidebarItemText,
+                    activeCategoryId === category.id && styles.sidebarItemTextActive,
+                  ]}
+                >
+                  {category.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       <Modal visible={modalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
@@ -225,6 +273,39 @@ export default function KeeperScreen({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+  },
+  menuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white50,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  menuBtnText: {
+    fontSize: 18,
+    color: COLORS.brown,
+    fontWeight: '700',
+  },
+  filterBadge: {
+    backgroundColor: COLORS.cream,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  filterBadgeText: {
+    color: COLORS.brown,
+    fontSize: FONTS.size.xs,
+    fontWeight: '600',
+  },
   content: { padding: 16, paddingBottom: 28 },
   hero: {
     alignItems: 'center',
@@ -389,6 +470,45 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.xs,
     color: COLORS.brownFaint,
     marginTop: 10,
+  },
+  sidebarOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+  },
+  sidebarDismiss: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.22)',
+  },
+  sidebar: {
+    width: 240,
+    backgroundColor: COLORS.bgAlt,
+    borderRightWidth: 1,
+    borderRightColor: COLORS.border,
+    paddingHorizontal: 16,
+    paddingTop: 54,
+  },
+  sidebarTitle: {
+    color: COLORS.brown,
+    fontSize: FONTS.size.sm,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  sidebarItem: {
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginBottom: 6,
+  },
+  sidebarItemActive: {
+    backgroundColor: COLORS.brown,
+  },
+  sidebarItemText: {
+    color: COLORS.brownMid,
+    fontSize: FONTS.size.sm,
+  },
+  sidebarItemTextActive: {
+    color: COLORS.bg,
+    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,

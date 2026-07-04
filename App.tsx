@@ -11,19 +11,17 @@ import {
   View,
 } from 'react-native';
 import { Audio } from 'expo-av';
-import HomeScreen from './src/screens/HomeScreen';
 import RecordingScreen from './src/screens/RecordingScreen';
 import CallPromptScreen from './src/screens/CallPromptScreen';
 import ProcessingScreen from './src/screens/ProcessingScreen';
 import ReviewScreen from './src/screens/ReviewScreen';
 import FoldersScreen from './src/screens/FoldersScreen';
 import FolderDetailScreen from './src/screens/FolderDetailScreen';
-import ActionsScreen from './src/screens/ActionsScreen';
 import KeeperScreen from './src/screens/KeeperScreen';
 import ToDosScreen from './src/screens/ToDosScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import CalendarScreen from './src/screens/CalendarScreen';
 import TabBar from './src/components/TabBar';
-import ScheduleDrawer, { ScheduleEntry } from './src/components/ScheduleDrawer';
 import TodoReminderModal from './src/components/TodoReminderModal';
 import { loadAppState, saveAppState } from './src/storage';
 import { classifyKeeperItem, classifyNote } from './src/lib/classify';
@@ -36,7 +34,6 @@ import {
 } from './src/lib/reminders';
 import {
   addChildFolder,
-  classifyDueBucket,
   collectFolderIds,
   deleteFolder,
   ensureFolder,
@@ -44,13 +41,17 @@ import {
   findFolderByName,
   findNode,
   flattenFolders,
+  formatClockTime,
   formatReminderLabel,
   makeId,
+  parseNaturalDateTime,
   parseSuggestedReminder,
   renameFolder,
+  withDuration,
 } from './src/utils';
 import { EMPTY_KEEPER_TREE, EMPTY_TREE, COLORS } from './src/constants';
 import type {
+  CalendarEvent,
   FolderNode,
   Note,
   PendingCapture,
@@ -58,10 +59,11 @@ import type {
   KeeperItem,
   TodoList,
   TodoItem,
+  EventSourceNote,
 } from './src/types';
 
-export type Tab = 'home' | 'notes' | 'keeper' | 'actions' | 'todos' | 'settings';
-export type Flow = 'idle' | 'callPrompt' | 'recording' | 'processing' | 'toast' | 'review';
+export type Tab = 'schedule' | 'notes' | 'keeper' | 'todos' | 'settings';
+export type Flow = 'idle' | 'callPrompt' | 'recording' | 'processing';
 type CaptureTarget = 'general' | 'keeper';
 
 interface ReminderQueueItem {
@@ -88,7 +90,7 @@ function todoTargetFromUrl(url: string): { listId: string | null; folderId: stri
 }
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('home');
+  const [tab, setTab] = useState<Tab>('schedule');
   const [flow, setFlow] = useState<Flow>('idle');
   const [callMode, setCallMode] = useState(false);
   const [captureTarget, setCaptureTarget] = useState<CaptureTarget>('general');
@@ -98,6 +100,7 @@ export default function App() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [keeperItems, setKeeperItems] = useState<KeeperItem[]>([]);
   const [todoLists, setTodoLists] = useState<TodoList[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     openaiKey: '',
     anthropicKey: '',
@@ -118,7 +121,6 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keeperProcessing, setKeeperProcessing] = useState(false);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [todoFocusFolderId, setTodoFocusFolderId] = useState<string | null>(null);
   const [todoFocusListId, setTodoFocusListId] = useState<string | null>(null);
   const [reminderQueue, setReminderQueue] = useState<ReminderQueueItem[]>([]);
@@ -128,7 +130,7 @@ export default function App() {
     if (!openFolder) return;
     const refreshed = findNode(tree, openFolder.id);
     setOpenFolder(refreshed);
-  }, [tree]);
+  }, [tree, openFolder]);
 
   useEffect(() => {
     loadAppState().then(s => {
@@ -140,6 +142,7 @@ export default function App() {
         if (s.notes) setNotes(s.notes);
         if (s.keeperItems) setKeeperItems(s.keeperItems);
         if (s.todoLists) setTodoLists(s.todoLists);
+        if (s.calendarEvents) setCalendarEvents(s.calendarEvents);
         if (s.settings) setSettings(prev => ({ ...prev, ...s.settings }));
       }
       setLoaded(true);
@@ -148,18 +151,15 @@ export default function App() {
 
   useEffect(() => {
     if (!loaded) return;
-    saveAppState({ tree, todoTree, keeperTree, notes, keeperItems, todoLists, settings });
-  }, [tree, todoTree, keeperTree, notes, keeperItems, todoLists, settings, loaded]);
+    saveAppState({ tree, todoTree, keeperTree, notes, keeperItems, todoLists, calendarEvents, settings });
+  }, [tree, todoTree, keeperTree, notes, keeperItems, todoLists, calendarEvents, settings, loaded]);
 
   useEffect(() => {
     if (!loaded || settings.microphonePermissionAsked) return;
     Audio.requestPermissionsAsync()
-      .then(permission => {
-        console.log('Initial microphone permission result', permission);
-        setSettings(prev => ({ ...prev, microphonePermissionAsked: true }));
-      })
-      .catch(error => {
-        console.warn('Initial microphone permission request failed', error);
+      .then(() => setSettings(prev => ({ ...prev, microphonePermissionAsked: true })))
+      .catch(errorValue => {
+        console.warn('Initial microphone permission request failed', errorValue);
       });
   }, [loaded, settings.microphonePermissionAsked]);
 
@@ -173,34 +173,6 @@ export default function App() {
       setTodoFocusListId(target.listId);
     });
   }, []);
-
-  const scheduleEntries = useMemo<ScheduleEntry[]>(() => {
-    const fromActions = notes.flatMap(note =>
-      note.actionItems
-        .filter(item => !item.done && item.due)
-        .map(item => ({
-          id: `${note.id}-${item.text}`,
-          title: item.text,
-          subtitle: note.title,
-          due: item.due || '',
-          bucket: classifyDueBucket(item.due) || 'later',
-        }))
-    );
-
-    const fromTodos = todoLists.flatMap(list =>
-      list.items
-        .filter(item => !item.done && item.due)
-        .map(item => ({
-          id: `${list.id}-${item.id}`,
-          title: item.text,
-          subtitle: list.title,
-          due: item.due || '',
-          bucket: classifyDueBucket(item.due) || 'later',
-        }))
-    );
-
-    return [...fromActions, ...fromTodos];
-  }, [notes, todoLists]);
 
   const handleIncomingUrl = async (url: string) => {
     const todoTarget = todoTargetFromUrl(url);
@@ -225,7 +197,6 @@ export default function App() {
     Linking.getInitialURL().then(url => {
       if (url) handleIncomingUrl(url);
     });
-
     const subscription = Linking.addEventListener('url', event => {
       handleIncomingUrl(event.url);
     });
@@ -237,7 +208,7 @@ export default function App() {
     setError(null);
 
     if (!settings.openaiKey) {
-      setError('No OpenAI key - add it in Settings first.');
+      setError('No OpenAI key. Add it in Settings first.');
       return;
     }
 
@@ -277,16 +248,11 @@ export default function App() {
       setKeeperTree(nextKeeperTree);
       setKeeperItems(items => [item, ...items]);
     } catch (e: any) {
-      console.error('Keeper save failed', e);
       setError(e.message || 'Could not save to Keeper.');
     } finally {
       setKeeperProcessing(false);
       setFlow('idle');
     }
-  };
-
-  const deleteKeeperItem = (itemId: string) => {
-    setKeeperItems(items => items.filter(item => item.id !== itemId));
   };
 
   const startRecording = () => {
@@ -316,21 +282,9 @@ export default function App() {
     setFlow('recording');
   };
 
-  const cancelCallPrompt = () => setFlow('idle');
-
-  const beginProcessing = () => {
-    setFlow('processing');
-  };
-
-  const handleRecordingError = (message: string) => {
-    console.error('Recording flow failed', message);
-    setError(message);
-    setFlow('idle');
-  };
-
   const handleRecordingComplete = async (audioUri: string) => {
     try {
-      if (!settings.openaiKey) throw new Error('No OpenAI key - add it in Settings first.');
+      if (!settings.openaiKey) throw new Error('No OpenAI key. Add it in Settings first.');
       const transcript = await transcribeAudio(audioUri, settings.openaiKey);
 
       if (captureTarget === 'keeper') {
@@ -338,7 +292,7 @@ export default function App() {
         return;
       }
 
-      const folderList = flattenFolders(todoTree);
+      const folderList = flattenFolders(tree);
       const classification = await classifyNote({
         transcript,
         folderList,
@@ -347,9 +301,8 @@ export default function App() {
         openaiKey: settings.openaiKey,
       });
       setPending({ ...classification, transcript, id: makeId('pending') } as PendingCapture);
-      setFlow('review');
+      setFlow('idle');
     } catch (e: any) {
-      console.error('Recording processing failed', e);
       setError(e.message || 'Something went wrong. Check your API keys in Settings.');
       setFlow('idle');
     } finally {
@@ -364,108 +317,192 @@ export default function App() {
     if (pendingCapture.existingFolderId) {
       return { folderId: pendingCapture.existingFolderId, nextTree: sourceTree, createdFolderName: null };
     }
-
     if (pendingCapture.newFolderSuggestion) {
       const added = addChildFolder(
         sourceTree,
         pendingCapture.newFolderSuggestion.parentId || 'root',
         pendingCapture.newFolderSuggestion.name
       );
-      return {
-        folderId: added.id,
-        nextTree: added.tree,
-        createdFolderName: pendingCapture.newFolderSuggestion.name,
-      };
+      return { folderId: added.id, nextTree: added.tree, createdFolderName: pendingCapture.newFolderSuggestion.name };
     }
-
     return { folderId: 'root', nextTree: sourceTree, createdFolderName: null };
-  };
-
-  const enqueueReminderPrompts = (items: TodoItem[], listId: string, folderId: string) => {
-    const nextQueue = items.map(item => ({
-      listId,
-      itemId: item.id,
-      folderId,
-      text: item.text,
-      suggestedDue: item.due,
-    }));
-    setReminderQueue(queue => [...queue, ...nextQueue]);
   };
 
   const maybePromptForMatchingNotesFolder = (categoryName: string) => {
     if (findFolderByName(tree, categoryName)) return;
-
-    Alert.alert(
-      'Create matching Notes folder?',
-      `Create a matching Notes folder for "${categoryName}"?`,
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes',
-          onPress: () => {
-            const added = addChildFolder(tree, 'root', categoryName);
-            setTree(added.tree);
-          },
+    Alert.alert('Create matching Notes folder?', `Create a matching Notes folder for "${categoryName}"?`, [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes',
+        onPress: () => {
+          const added = addChildFolder(tree, 'root', categoryName);
+          setTree(added.tree);
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  const approvePending = (overrideFolderId?: string) => {
+  const createActionItemsList = (
+    sourceFolderId: string,
+    items: Array<{ text: string; due: string | null }>,
+    sourceNote: EventSourceNote
+  ): { listId: string; todoItems: TodoItem[] } => {
+    const actionListId = makeId('list');
+    const todoItems = items.map(item => ({
+      id: makeId('todo'),
+      text: item.text,
+      due: item.due || null,
+      reminderAt: parseSuggestedReminder(item.due),
+      notificationId: null,
+      done: false,
+      ts: Date.now(),
+      fromNote: sourceNote,
+    }));
+
+    setTodoLists(current => [
+      {
+        id: actionListId,
+        title: 'Action Items',
+        folderId: sourceFolderId,
+        items: todoItems,
+        ts: Date.now(),
+      },
+      ...current,
+    ]);
+
+    return { listId: actionListId, todoItems };
+  };
+
+  const scheduleReminderIfNeeded = async (listId: string, folderId: string, item: TodoItem) => {
+    if (!item.reminderAt) return item;
+    const granted = await requestReminderPermissions();
+    setSettings(prev => ({ ...prev, notificationsPermissionAsked: true }));
+    if (!granted) {
+      setError('Notifications are off. Enable them in Android Settings to receive reminders.');
+      return item;
+    }
+    const notificationId = await scheduleTodoReminder('To-do reminder', item.text, item.reminderAt, listId, folderId);
+    return { ...item, notificationId };
+  };
+
+  const appendCalendarEvents = (
+    items: Array<{ title: string; due: string | null; todoItemId?: string | null }>,
+    sourceFolderId: string | null,
+    sourceNote: EventSourceNote | null,
+    listId: string | null
+  ) => {
+    const nextEvents = items
+      .map(item => {
+        if (!item.due) return null;
+        const parsed = parseNaturalDateTime(item.due, item.due);
+        if (!parsed) return null;
+        return {
+          id: makeId('event'),
+          title: item.title,
+          startAt: parsed.startAt,
+          endAt: parsed.endAt,
+          allDay: parsed.allDay,
+          categoryFolderId: sourceFolderId,
+          todoListId: listId,
+          todoItemId: item.todoItemId || null,
+          sourceNote,
+          kind: sourceNote ? 'action_item' : 'calendar',
+          ts: Date.now(),
+        } as CalendarEvent;
+      })
+      .filter(Boolean) as CalendarEvent[];
+
+    if (nextEvents.length) {
+      setCalendarEvents(current => [...nextEvents, ...current]);
+    }
+  };
+
+  const approvePending = async (overrideFolderId?: string) => {
     if (!pending) return;
+
+    if (pending.contentType === 'calendar_entries') {
+      const events = pending.calendarEntries
+        .map(entry => {
+          const parsed = parseNaturalDateTime(entry.date, entry.time);
+          return parsed ? withDuration(parsed, entry.durationMinutes) : null;
+        })
+        .map((parsed, index) =>
+          parsed
+            ? ({
+                id: makeId('event'),
+                title: pending.calendarEntries[index].title,
+                startAt: parsed.startAt,
+                endAt: parsed.endAt,
+                allDay: parsed.allDay,
+                categoryFolderId: null,
+                todoListId: null,
+                todoItemId: null,
+                sourceNote: null,
+                kind: 'calendar',
+                ts: Date.now(),
+              } as CalendarEvent)
+            : null
+        )
+        .filter(Boolean) as CalendarEvent[];
+
+      setCalendarEvents(current => [...events, ...current]);
+      setPending(null);
+      setTab('schedule');
+      return;
+    }
 
     if (pending.contentType === 'todo_items') {
       const folderResolution = overrideFolderId
         ? { folderId: overrideFolderId, nextTree: todoTree, createdFolderName: null as string | null }
         : resolveFolderInTree(todoTree, pending);
 
-      if (folderResolution.nextTree !== todoTree) {
-        setTodoTree(folderResolution.nextTree);
-      }
+      if (folderResolution.nextTree !== todoTree) setTodoTree(folderResolution.nextTree);
 
-      const newItems: TodoItem[] = pending.todoItems.map(item => ({
+      const createdItems: TodoItem[] = pending.todoItems.map(item => ({
         id: makeId('todo'),
         text: item.text,
         due: item.due || null,
-        reminderAt: null,
+        reminderAt: parseSuggestedReminder(item.due),
         notificationId: null,
         done: false,
         ts: Date.now(),
+        fromNote: null,
       }));
 
       const nextListId =
-        pending.existingTodoListId &&
-        todoLists.some(list => list.id === pending.existingTodoListId)
+        pending.existingTodoListId && todoLists.some(list => list.id === pending.existingTodoListId)
           ? pending.existingTodoListId
           : makeId('list');
 
       setTodoLists(lists => {
         if (pending.existingTodoListId && lists.some(list => list.id === pending.existingTodoListId)) {
-          return lists.map(list =>
-            list.id === pending.existingTodoListId
-              ? { ...list, items: [...list.items, ...newItems] }
-              : list
-          );
+          return lists.map(list => (list.id === pending.existingTodoListId ? { ...list, items: [...list.items, ...createdItems] } : list));
         }
-
-        const newList: TodoList = {
-          id: nextListId,
-          title: pending.newTodoListTitle || pending.title || 'To-do list',
-          folderId: folderResolution.folderId,
-          items: newItems,
-          ts: Date.now(),
-        };
-        return [newList, ...lists];
+        return [
+          {
+            id: nextListId,
+            title: pending.newTodoListTitle || pending.title || 'To-do list',
+            folderId: folderResolution.folderId,
+            items: createdItems,
+            ts: Date.now(),
+          },
+          ...lists,
+        ];
       });
 
-      enqueueReminderPrompts(newItems, nextListId, folderResolution.folderId);
-      if (folderResolution.createdFolderName) {
-        maybePromptForMatchingNotesFolder(folderResolution.createdFolderName);
-      }
+      const finalListId = nextListId;
+      Promise.all(createdItems.map(item => scheduleReminderIfNeeded(finalListId, folderResolution.folderId, item))).then(
+        scheduledItems => {
+          setTodoLists(lists =>
+            lists.map(list => (list.id === finalListId ? { ...list, items: scheduledItems } : list))
+          );
+        }
+      );
+
+      if (folderResolution.createdFolderName) maybePromptForMatchingNotesFolder(folderResolution.createdFolderName);
       setTodoFocusFolderId(folderResolution.folderId);
       setTodoFocusListId(nextListId);
       setPending(null);
-      setFlow('idle');
       setTab('todos');
       return;
     }
@@ -474,166 +511,90 @@ export default function App() {
       ? { folderId: overrideFolderId, nextTree: tree, createdFolderName: null as string | null }
       : resolveFolderInTree(tree, pending);
 
-    if (folderResolution.nextTree !== tree) {
-      setTree(folderResolution.nextTree);
-    }
+    if (folderResolution.nextTree !== tree) setTree(folderResolution.nextTree);
 
+    const noteId = pending.id;
     const note: Note = {
-      id: pending.id,
+      id: noteId,
       title: pending.title,
       summary: pending.summary,
       transcript: pending.transcript,
       folderId: folderResolution.folderId,
       ts: Date.now(),
       callMode,
-      actionItems: pending.actionItems.map(a => ({
-        text: a.text,
-        due: a.due || null,
-        done: false,
-      })),
+      actionItems: pending.actionItems.map(a => ({ text: a.text, due: a.due || null, done: false })),
     };
 
-    setNotes(n => [note, ...n]);
+    setNotes(current => [note, ...current]);
+
+    if (pending.actionItems.length > 0) {
+      const sourceNote = { noteId, noteTitle: pending.title };
+      const actionList = createActionItemsList(
+        folderResolution.folderId,
+        pending.actionItems.map(item => ({ text: item.text, due: item.due })),
+        sourceNote
+      );
+      const scheduledItems = await Promise.all(
+        actionList.todoItems.map(item => scheduleReminderIfNeeded(actionList.listId, folderResolution.folderId, item))
+      );
+      setTodoLists(current =>
+        current.map(list => (list.id === actionList.listId ? { ...list, items: scheduledItems } : list))
+      );
+      appendCalendarEvents(
+        scheduledItems
+          .filter(item => item.due)
+          .map(item => ({ title: item.text, due: item.due, todoItemId: item.id })),
+        folderResolution.folderId,
+        sourceNote,
+        actionList.listId
+      );
+    }
+
     setPending(null);
-    setFlow('idle');
-    setTab('home');
+    setTab('notes');
   };
 
-  const discardPending = () => {
-    setPending(null);
-    setFlow('idle');
-  };
-
-  const toggleActionItem = (noteId: string, idx: number) => {
-    setNotes(ns =>
-      ns.map(n =>
-        n.id === noteId
-          ? {
-              ...n,
-              actionItems: n.actionItems.map((a, i) =>
-                i === idx ? { ...a, done: !a.done } : a
-              ),
-            }
-          : n
-      )
-    );
-  };
+  const discardPending = () => setPending(null);
 
   const toggleTodoItem = (listId: string, itemId: string) => {
     setTodoLists(lists =>
       lists.map(list =>
         list.id === listId
-          ? {
-              ...list,
-              items: list.items.map(item =>
-                item.id === itemId ? { ...item, done: !item.done } : item
-              ),
-            }
+          ? { ...list, items: list.items.map(item => (item.id === itemId ? { ...item, done: !item.done } : item)) }
           : list
       )
     );
   };
 
   const renameTodoList = (listId: string, title: string) => {
-    setTodoLists(lists =>
-      lists.map(list => (list.id === listId ? { ...list, title } : list))
-    );
+    setTodoLists(lists => lists.map(list => (list.id === listId ? { ...list, title } : list)));
   };
 
   const updateTodoItemText = async (listId: string, itemId: string, text: string) => {
     const list = todoLists.find(entry => entry.id === listId);
     const item = list?.items.find(entry => entry.id === itemId);
     if (!list || !item) return;
-
-    let nextNotificationId = item.notificationId;
+    let notificationId = item.notificationId;
     if (item.reminderAt) {
-      if (nextNotificationId) {
-        await cancelTodoReminder(nextNotificationId);
-      }
-      nextNotificationId = await scheduleTodoReminder(
-        'To-do reminder',
-        text,
-        item.reminderAt,
-        listId,
-        list.folderId
-      );
+      if (notificationId) await cancelTodoReminder(notificationId);
+      notificationId = await scheduleTodoReminder('To-do reminder', text, item.reminderAt, listId, list.folderId);
     }
-
     setTodoLists(lists =>
       lists.map(entry =>
         entry.id === listId
-          ? {
-              ...entry,
-              items: entry.items.map(todo =>
-                todo.id === itemId
-                  ? { ...todo, text, notificationId: nextNotificationId }
-                  : todo
-              ),
-            }
+          ? { ...entry, items: entry.items.map(todo => (todo.id === itemId ? { ...todo, text, notificationId } : todo)) }
           : entry
       )
     );
   };
 
   const deleteTodoItem = async (listId: string, itemId: string) => {
-    const item = todoLists
-      .find(list => list.id === listId)
-      ?.items.find(todo => todo.id === itemId);
-    if (item?.notificationId) {
-      await cancelTodoReminder(item.notificationId);
-    }
+    const item = todoLists.find(list => list.id === listId)?.items.find(todo => todo.id === itemId);
+    if (item?.notificationId) await cancelTodoReminder(item.notificationId);
     setTodoLists(lists =>
-      lists.map(list =>
-        list.id === listId
-          ? { ...list, items: list.items.filter(todo => todo.id !== itemId) }
-          : list
-      )
+      lists.map(list => (list.id === listId ? { ...list, items: list.items.filter(todo => todo.id !== itemId) } : list))
     );
-  };
-
-  const renameNoteFolder = (folderId: string, name: string) => {
-    setTree(current => renameFolder(current, folderId, name));
-  };
-
-  const deleteNoteFolder = (folderId: string) => {
-    const target = findNode(tree, folderId);
-    if (!target) return;
-
-    const folderIds = collectFolderIds(target);
-    const noteCount = notes.filter(note => folderIds.has(note.folderId)).length;
-    const subfolderCount = Math.max(folderIds.size - 1, 0);
-
-    const performDelete = () => {
-      const ensured = ensureFolder(tree, 'Miscellaneous');
-      const miscId = ensured.id;
-      const nextTree = deleteFolder(ensured.tree, folderId);
-      setTree(nextTree);
-      setNotes(current =>
-        current.map(note =>
-          folderIds.has(note.folderId) ? { ...note, folderId: miscId } : note
-        )
-      );
-      if (openFolder && folderIds.has(openFolder.id)) {
-        setOpenFolder(null);
-      }
-    };
-
-    if (noteCount === 0 && subfolderCount === 0) {
-      Alert.alert('Delete folder?', 'This folder is empty.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: performDelete },
-      ]);
-      return;
-    }
-
-    Alert.alert(
-      'Delete folder?',
-      `This folder contains ${noteCount} notes and ${subfolderCount} subfolders. Deleting it will move all contents to Miscellaneous. Continue?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: performDelete },
-      ]
-    );
+    setCalendarEvents(events => events.filter(event => event.todoItemId !== itemId));
   };
 
   const addManualTodoItem = (listId: string, text: string) => {
@@ -647,14 +608,9 @@ export default function App() {
       notificationId: null,
       done: false,
       ts: Date.now(),
+      fromNote: null,
     };
-
-    setTodoLists(lists =>
-      lists.map(list => {
-        if (list.id !== listId) return list;
-        return { ...list, items: [...list.items, item] };
-      })
-    );
+    setTodoLists(lists => lists.map(list => (list.id === listId ? { ...list, items: [...list.items, item] } : list)));
   };
 
   const updateTodoReminder = async (target: ReminderQueueItem, reminderAt: number | null) => {
@@ -665,7 +621,7 @@ export default function App() {
       return;
     }
 
-    let notificationId: string | null = item.notificationId;
+    let notificationId = item.notificationId;
     if (notificationId) {
       await cancelTodoReminder(notificationId);
       notificationId = null;
@@ -677,13 +633,7 @@ export default function App() {
       if (!granted) {
         setError('Notifications are off. Enable them in Android Settings to receive reminders.');
       } else {
-        notificationId = await scheduleTodoReminder(
-          'To-do reminder',
-          item.text,
-          reminderAt,
-          target.listId,
-          target.folderId
-        );
+        notificationId = await scheduleTodoReminder('To-do reminder', item.text, reminderAt, target.listId, target.folderId);
       }
     }
 
@@ -694,14 +644,7 @@ export default function App() {
           ? {
               ...entry,
               items: entry.items.map(todo =>
-                todo.id === target.itemId
-                  ? {
-                      ...todo,
-                      reminderAt,
-                      notificationId,
-                      due: dueLabel,
-                    }
-                  : todo
+                todo.id === target.itemId ? { ...todo, reminderAt, notificationId, due: dueLabel } : todo
               ),
             }
           : entry
@@ -714,24 +657,37 @@ export default function App() {
     const list = todoLists.find(entry => entry.id === listId);
     const item = list?.items.find(entry => entry.id === itemId);
     if (!list || !item) return;
-    setReminderQueue(queue => [
-      {
-        listId,
-        itemId,
-        folderId: list.folderId,
-        text: item.text,
-        suggestedDue: item.due,
-      },
-      ...queue,
-    ]);
+    setReminderQueue(queue => [{ listId, itemId, folderId: list.folderId, text: item.text, suggestedDue: item.due }, ...queue]);
   };
 
-  const showTabBar = flow === 'idle' || flow === 'toast';
+  const openSourceNote = (noteId: string) => {
+    const note = notes.find(entry => entry.id === noteId);
+    if (!note) return;
+    const folder = findNode(tree, note.folderId);
+    setOpenFolder(folder);
+    setTab('notes');
+  };
+
+  const renameNoteFolder = (folderId: string, name: string) => {
+    setTree(current => renameFolder(current, folderId, name));
+  };
+
+  const deleteNoteFolder = (folderId: string) => {
+    const target = findNode(tree, folderId);
+    if (!target) return;
+    const folderIds = collectFolderIds(target);
+    const ensured = ensureFolder(tree, 'Miscellaneous');
+    const nextTree = deleteFolder(ensured.tree, folderId);
+    setTree(nextTree);
+    setNotes(current =>
+      current.map(note => (folderIds.has(note.folderId) ? { ...note, folderId: ensured.id } : note))
+    );
+    if (openFolder && folderIds.has(openFolder.id)) setOpenFolder(null);
+  };
+
   const currentReminder = reminderQueue[0] || null;
   const currentReminderTimestamp = currentReminder
-    ? todoLists
-        .find(list => list.id === currentReminder.listId)
-        ?.items.find(item => item.id === currentReminder.itemId)?.reminderAt ||
+    ? todoLists.find(list => list.id === currentReminder.listId)?.items.find(item => item.id === currentReminder.itemId)?.reminderAt ||
       parseSuggestedReminder(currentReminder.suggestedDue) ||
       (() => {
         const now = new Date();
@@ -741,70 +697,39 @@ export default function App() {
       })()
     : Date.now();
 
-  let screen: React.ReactNode;
+  const reviewTree = pending?.contentType === 'todo_items' ? todoTree : tree;
+  const showFloatingMic = flow === 'idle' && !pending;
 
+  let screen: React.ReactNode;
   if (flow === 'callPrompt') {
-    screen = (
-      <CallPromptScreen
-        onConfirm={confirmCallRecording}
-        onCancel={cancelCallPrompt}
-      />
-    );
+    screen = <CallPromptScreen onConfirm={confirmCallRecording} onCancel={() => setFlow('idle')} />;
   } else if (flow === 'recording') {
     screen = (
       <RecordingScreen
         callMode={callMode}
         target={captureTarget === 'keeper' ? 'keeper' : 'note'}
-        onBeginProcessing={beginProcessing}
-        onError={handleRecordingError}
+        onBeginProcessing={() => setFlow('processing')}
+        onError={message => {
+          setError(message);
+          setFlow('idle');
+        }}
         onComplete={handleRecordingComplete}
       />
     );
   } else if (flow === 'processing') {
     screen = <ProcessingScreen />;
-  } else if (flow === 'review') {
-    screen = (
-      <ReviewScreen
-        pending={pending!}
-        tree={pending?.contentType === 'todo_items' ? todoTree : tree}
-        todoLists={todoLists}
-        onApprove={approvePending}
-        onDiscard={discardPending}
-      />
-    );
-  } else if (flow === 'toast') {
-    screen = (
-      <HomeScreen
-        notes={notes}
-        error={error}
-        onRecordTap={startRecording}
-        onCallRecordTap={startCallPrompt}
-        showToast
-        onToastTap={() => setFlow('review')}
-      />
-    );
-  } else if (tab === 'home') {
-    screen = (
-      <HomeScreen
-        notes={notes}
-        error={error}
-        onRecordTap={startRecording}
-        onCallRecordTap={startCallPrompt}
-        showToast={false}
-      />
-    );
   } else if (tab === 'notes') {
     screen = openFolder ? (
-      <FolderDetailScreen
-        folder={openFolder}
-        notes={notes}
-        onBack={() => setOpenFolder(null)}
-        onOpenFolder={setOpenFolder}
-        onRenameFolder={renameNoteFolder}
-        onDeleteFolder={deleteNoteFolder}
-      />
-    ) : (
-      <FoldersScreen
+        <FolderDetailScreen
+          folder={openFolder}
+          notes={notes}
+          onBack={() => setOpenFolder(null)}
+          onOpenFolder={setOpenFolder}
+          onRenameFolder={renameNoteFolder}
+          onDeleteFolder={deleteNoteFolder}
+        />
+      ) : (
+        <FoldersScreen
         tree={tree}
         notes={notes}
         onOpenFolder={setOpenFolder}
@@ -823,19 +748,9 @@ export default function App() {
         items={keeperItems}
         processing={keeperProcessing}
         error={error}
-        onDeleteItem={deleteKeeperItem}
-        onAddText={text => {
-          saveKeeperItem(text, null);
-        }}
+        onDeleteItem={itemId => setKeeperItems(items => items.filter(item => item.id !== itemId))}
+        onAddText={text => saveKeeperItem(text, null)}
         onRecord={startKeeperRecording}
-      />
-    );
-  } else if (tab === 'actions') {
-    screen = (
-      <ActionsScreen
-        notes={notes}
-        tree={tree}
-        onToggle={toggleActionItem}
       />
     );
   } else if (tab === 'todos') {
@@ -851,13 +766,21 @@ export default function App() {
         onRenameList={renameTodoList}
         onEditItem={updateTodoItemText}
         onDeleteItem={deleteTodoItem}
+        onOpenSourceNote={openSourceNote}
       />
     );
+  } else if (tab === 'settings') {
+    screen = <SettingsScreen settings={settings} onSave={setSettings} />;
   } else {
     screen = (
-      <SettingsScreen
-        settings={settings}
-        onSave={setSettings}
+      <CalendarScreen
+        events={calendarEvents}
+        onOpenEvent={event => {
+          Alert.alert(event.title, event.allDay ? 'All day' : `${formatClockTime(event.startAt)} - ${formatClockTime(event.endAt)}`);
+        }}
+        onRescheduleEvent={(eventId, startAt, endAt, allDay) => {
+          setCalendarEvents(events => events.map(event => (event.id === eventId ? { ...event, startAt, endAt, allDay } : event)));
+        }}
       />
     );
   }
@@ -867,31 +790,30 @@ export default function App() {
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
       <View style={styles.inner}>
         {screen}
-        {showTabBar && (
-          <>
-            <TouchableOpacity
-              style={styles.scheduleHandle}
-              onPress={() => setScheduleOpen(true)}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.scheduleHandleText}>Schedule</Text>
-            </TouchableOpacity>
-            <TabBar
-              active={tab}
-              onChange={t => {
-                setFlow('idle');
-                setTab(t as Tab);
-                setOpenFolder(null);
-              }}
-            />
-          </>
-        )}
-        <ScheduleDrawer
-          visible={scheduleOpen}
-          routineText={settings.schedule}
-          entries={scheduleEntries}
-          onClose={() => setScheduleOpen(false)}
-        />
+        {flow === 'idle' ? (
+          <TabBar
+            active={tab}
+            onChange={nextTab => {
+              setTab(nextTab as Tab);
+              setOpenFolder(null);
+            }}
+          />
+        ) : null}
+        {showFloatingMic ? (
+          <TouchableOpacity style={styles.fab} onPress={startRecording} activeOpacity={0.88}>
+            <Text style={styles.fabIcon}>Mic</Text>
+          </TouchableOpacity>
+        ) : null}
+        {pending ? (
+          <ReviewScreen
+            visible
+            pending={pending}
+            tree={reviewTree}
+            todoLists={todoLists}
+            onApprove={approvePending}
+            onDiscard={discardPending}
+          />
+        ) : null}
         {currentReminder ? (
           <TodoReminderModal
             visible
@@ -913,23 +835,27 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
-  inner: {
-    flex: 1,
-  },
-  scheduleHandle: {
+  inner: { flex: 1 },
+  fab: {
     position: 'absolute',
-    right: 0,
-    top: '38%',
+    right: 18,
+    bottom: 76,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: COLORS.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 6,
     zIndex: 20,
-    backgroundColor: COLORS.brown,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    borderTopLeftRadius: 14,
-    borderBottomLeftRadius: 14,
   },
-  scheduleHandleText: {
-    color: COLORS.bg,
-    fontSize: 12,
-    fontWeight: '600',
+  fabIcon: {
+    color: '#fff7f1',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });

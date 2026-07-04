@@ -1,4 +1,4 @@
-import { FolderNode, FlatFolder } from './types';
+import { CalendarEvent, FolderNode, FlatFolder } from './types';
 
 export function flattenFolders(node: FolderNode, path: string[] = []): FlatFolder[] {
   const here: FlatFolder = {
@@ -241,4 +241,156 @@ export function parseSuggestedReminder(input: string | null): number | null {
 
   const absolute = Date.parse(input);
   return Number.isNaN(absolute) ? null : absolute;
+}
+
+export function startOfDay(date: Date): Date {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+export function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+export function sameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+export function startOfWeek(date: Date): Date {
+  const next = startOfDay(date);
+  next.setDate(next.getDate() - next.getDay());
+  return next;
+}
+
+export function formatClockTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+export function formatShortDate(ts: number): string {
+  return new Date(ts).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+export function formatMonthLabel(date: Date): string {
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+export function parseNaturalDateTime(
+  dateText: string | null,
+  timeText: string | null
+): { startAt: number; endAt: number; allDay: boolean } | null {
+  const now = new Date();
+  const baseDate = parseRelativeDate(dateText) || startOfDay(now);
+  if (!baseDate) return null;
+
+  const time = parseTimeOfDay(timeText);
+  if (!time) {
+    const start = new Date(baseDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    return { startAt: start.getTime(), endAt: end.getTime(), allDay: true };
+  }
+
+  const start = new Date(baseDate);
+  start.setHours(time.hours, time.minutes, 0, 0);
+  const end = new Date(start);
+  end.setMinutes(end.getMinutes() + 60);
+  return { startAt: start.getTime(), endAt: end.getTime(), allDay: false };
+}
+
+export function withDuration(
+  parsed: { startAt: number; endAt: number; allDay: boolean },
+  durationMinutes: number | null
+): { startAt: number; endAt: number; allDay: boolean } {
+  if (parsed.allDay || !durationMinutes || durationMinutes <= 0) return parsed;
+  return {
+    ...parsed,
+    endAt: parsed.startAt + durationMinutes * 60 * 1000,
+  };
+}
+
+export function eventOccursOnDay(event: CalendarEvent, day: Date): boolean {
+  const dayStart = startOfDay(day).getTime();
+  const dayEnd = addDays(startOfDay(day), 1).getTime();
+  return event.startAt < dayEnd && event.endAt > dayStart;
+}
+
+function parseRelativeDate(input: string | null): Date | null {
+  if (!input) return null;
+  const value = input.trim();
+  if (!value) return null;
+
+  const direct = Date.parse(value);
+  if (!Number.isNaN(direct)) {
+    return startOfDay(new Date(direct));
+  }
+
+  const lowered = value.toLowerCase();
+  const today = startOfDay(new Date());
+  if (lowered === 'today') return today;
+  if (lowered === 'tomorrow') return addDays(today, 1);
+
+  const weekdayMap: Record<string, number> = {
+    sunday: 0,
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
+    saturday: 6,
+    sun: 0,
+    mon: 1,
+    tue: 2,
+    wed: 3,
+    thu: 4,
+    fri: 5,
+    sat: 6,
+  };
+
+  for (const [label, day] of Object.entries(weekdayMap)) {
+    if (lowered.includes(label)) {
+      const next = new Date(today);
+      const diff = (day - next.getDay() + 7) % 7;
+      next.setDate(next.getDate() + diff);
+      return next;
+    }
+  }
+
+  return null;
+}
+
+function parseTimeOfDay(input: string | null): { hours: number; minutes: number } | null {
+  if (!input) return null;
+  const value = input.trim().toLowerCase();
+  if (!value) return null;
+  if (value.includes('morning')) return { hours: 9, minutes: 0 };
+  if (value.includes('afternoon')) return { hours: 13, minutes: 0 };
+  if (value.includes('evening')) return { hours: 18, minutes: 0 };
+  if (value.includes('night')) return { hours: 20, minutes: 0 };
+
+  const match = value.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (!match) return null;
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] || '0');
+  const meridiem = match[3]?.toLowerCase();
+  if (meridiem === 'pm' && hours < 12) hours += 12;
+  if (meridiem === 'am' && hours === 12) hours = 0;
+  return { hours, minutes };
 }
