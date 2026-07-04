@@ -700,6 +700,7 @@ export default function App() {
 
   const reviewTree = pending?.contentType === 'todo_items' ? todoTree : tree;
   const showFloatingMic = flow === 'idle' && !pending;
+  const placeFabLeft = tab === 'notes';
 
   let screen: React.ReactNode;
   if (flow === 'callPrompt') {
@@ -801,7 +802,11 @@ export default function App() {
           />
         ) : null}
         {showFloatingMic ? (
-          <TouchableOpacity style={styles.fab} onPress={startRecording} activeOpacity={0.88}>
+          <TouchableOpacity
+            style={[styles.fab, placeFabLeft ? styles.fabLeft : styles.fabRight]}
+            onPress={startRecording}
+            activeOpacity={0.88}
+          >
             <MaterialCommunityIcons name="microphone" size={26} color="#fff7f1" />
           </TouchableOpacity>
         ) : null}
@@ -839,7 +844,6 @@ const styles = StyleSheet.create({
   inner: { flex: 1 },
   fab: {
     position: 'absolute',
-    right: 18,
     bottom: 76,
     width: 56,
     height: 56,
@@ -853,5 +857,11 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
     zIndex: 20,
+  },
+  fabLeft: {
+    left: 18,
+  },
+  fabRight: {
+    right: 18,
   },
 });
