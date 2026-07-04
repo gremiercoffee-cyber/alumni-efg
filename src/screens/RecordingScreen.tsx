@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
+  AppStateStatus,
   InteractionManager,
   StyleSheet,
   Text,
@@ -48,7 +50,7 @@ export default function RecordingScreen({
   onError,
   onComplete,
 }: Props) {
-  const [seconds, setSeconds] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(true);
   const [ready, setReady] = useState(false);
@@ -56,6 +58,8 @@ export default function RecordingScreen({
   const recordingRef = useRef<Audio.Recording | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startPromiseRef = useRef<Promise<void> | null>(null);
+  const startedAtRef = useRef<number | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const reportError = (prefix: string, err: unknown) => {
     const details =
@@ -88,7 +92,10 @@ export default function RecordingScreen({
       return;
     }
 
-    timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
+    timerRef.current = setInterval(() => {
+      if (!startedAtRef.current) return;
+      setElapsedMs(Date.now() - startedAtRef.current);
+    }, 1000);
 
     return () => {
       if (timerRef.current) {
@@ -98,12 +105,40 @@ export default function RecordingScreen({
     };
   }, [ready, stopping]);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async nextState => {
+      const previous = appStateRef.current;
+      appStateRef.current = nextState;
+
+      if (
+        (previous === 'background' || previous === 'inactive') &&
+        nextState === 'active' &&
+        recordingRef.current &&
+        ready &&
+        !stopping
+      ) {
+        const status = await recordingRef.current.getStatusAsync();
+        console.log('Recording status after foreground resume', status);
+        if (!status.isRecording) {
+          reportError('Recording stopped unexpectedly while the app was in the background.', status);
+          return;
+        }
+        if (startedAtRef.current) {
+          setElapsedMs(Date.now() - startedAtRef.current);
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, [ready, stopping]);
+
   const startRecording = async () => {
     try {
       setError(null);
       setStarting(true);
       setReady(false);
-      setSeconds(0);
+      setElapsedMs(0);
+      startedAtRef.current = null;
 
       const permission = await Audio.getPermissionsAsync();
       console.log('Audio.getPermissionsAsync result', permission);
@@ -128,7 +163,7 @@ export default function RecordingScreen({
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
+        staysActiveInBackground: true,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
       });
@@ -146,6 +181,7 @@ export default function RecordingScreen({
 
       console.log('Audio recording created successfully', { callMode, target });
       recordingRef.current = recording;
+      startedAtRef.current = Date.now();
       setReady(true);
     } catch (e: unknown) {
       reportError('Could not start recording.', e);
@@ -215,8 +251,9 @@ export default function RecordingScreen({
     }
   };
 
-  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
-  const ss = String(seconds % 60).padStart(2, '0');
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+  const ss = String(totalSeconds % 60).padStart(2, '0');
 
   return (
     <View style={styles.container}>
@@ -244,7 +281,7 @@ export default function RecordingScreen({
             style={[
               styles.bar,
               {
-                height: 20 + Math.sin(i * 1.3 + seconds) * 12 + 12,
+                height: 20 + Math.sin(i * 1.3 + totalSeconds) * 12 + 12,
               },
             ]}
           />
