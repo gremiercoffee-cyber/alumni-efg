@@ -2,13 +2,16 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
-  PanResponder,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import {
+  PanGestureHandler,
+  ScrollView,
+  State,
+} from 'react-native-gesture-handler';
 import TopBar from '../components/TopBar';
 import { COLORS, EVENT_TYPE_LABELS, FONTS } from '../constants';
 import { CalendarEvent, FolderNode } from '../types';
@@ -228,7 +231,7 @@ function DayView({
   onOpenEvent: (event: CalendarEvent) => void;
   onRescheduleEvent: (eventId: string, startAt: number, endAt: number, allDay: boolean) => void;
 }) {
-  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollRef = useRef<any>(null);
   const dragOffsetY = useRef(new Animated.Value(0)).current;
   const dragRef = useRef<{ eventId: string | null; originalStart: number; duration: number }>({
     eventId: null,
@@ -237,6 +240,10 @@ function DayView({
   });
   const [draggingEventId, setDraggingEventId] = useState<string | null>(null);
   const [previewStartTimes, setPreviewStartTimes] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    console.log('[CalendarDrag] Day view gesture handler mounted');
+  }, []);
 
   const snapDeltaToMinutes = (deltaY: number) => {
     const deltaMinutes = (deltaY / HOUR_HEIGHT) * 60;
@@ -273,48 +280,59 @@ function DayView({
     setDraggingEventId(null);
   };
 
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => !!dragRef.current.eventId,
-        onMoveShouldSetPanResponder: (_, gesture) => !!dragRef.current.eventId && Math.abs(gesture.dy) > 2,
-        onPanResponderMove: (_, gesture) => {
-          if (!dragRef.current.eventId) return;
-          const snappedMinutes = snapDeltaToMinutes(gesture.dy);
-          const snappedY = (snappedMinutes / 60) * HOUR_HEIGHT;
-          const nextStart = dragRef.current.originalStart + snappedMinutes * 60 * 1000;
-          dragOffsetY.setValue(snappedY);
-          setPreviewStartTimes(current => ({
-            ...current,
-            [dragRef.current.eventId as string]: nextStart,
-          }));
-        },
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderRelease: (_, gesture) => {
-          if (!dragRef.current.eventId) return;
-          const { eventId, originalStart, duration } = dragRef.current;
-          const snappedMinutes = snapDeltaToMinutes(gesture.dy);
-          const nextStart = originalStart + snappedMinutes * 60 * 1000;
-          const nextEnd = nextStart + duration;
-          const nextStartDate = new Date(nextStart);
-          const nextEndDate = new Date(nextEnd);
-          resetDrag(eventId);
-          if (
-            startOfDay(nextStartDate).getTime() !== startOfDay(day).getTime() ||
-            startOfDay(nextEndDate).getTime() !== startOfDay(day).getTime()
-          ) {
-            Alert.alert('Keep this in the current day', 'Drag within the visible day to reschedule the event.');
-            return;
-          }
-          onRescheduleEvent(eventId, nextStart, nextEnd, false);
-        },
-        onPanResponderTerminate: () => resetDrag(dragRef.current.eventId),
-      }),
-    [day, onRescheduleEvent]
-  );
+  const applyPreview = (eventId: string, originalStart: number, translationY: number) => {
+    const snappedMinutes = snapDeltaToMinutes(translationY);
+    const snappedY = (snappedMinutes / 60) * HOUR_HEIGHT;
+    const nextStart = originalStart + snappedMinutes * 60 * 1000;
+    dragOffsetY.setValue(snappedY);
+    setPreviewStartTimes(current => ({
+      ...current,
+      [eventId]: nextStart,
+    }));
+  };
+
+  const finishDrag = (
+    eventId: string,
+    originalStart: number,
+    duration: number,
+    translationY: number
+  ) => {
+    const snappedMinutes = snapDeltaToMinutes(translationY);
+    const nextStart = originalStart + snappedMinutes * 60 * 1000;
+    const nextEnd = nextStart + duration;
+    const nextStartDate = new Date(nextStart);
+    const nextEndDate = new Date(nextEnd);
+    const dropY = topForTimestamp(originalStart) + (snappedMinutes / 60) * HOUR_HEIGHT;
+
+    console.log('[CalendarDrag] END drop', {
+      eventId,
+      translationY,
+      dropY,
+      nextStart,
+      nextEnd,
+      nextTime: `${formatClockTime(nextStart)} - ${formatClockTime(nextEnd)}`,
+    });
+
+    resetDrag(eventId);
+
+    if (
+      startOfDay(nextStartDate).getTime() !== startOfDay(day).getTime() ||
+      startOfDay(nextEndDate).getTime() !== startOfDay(day).getTime()
+    ) {
+      Alert.alert('Keep this in the current day', 'Drag within the visible day to reschedule the event.');
+      return;
+    }
+
+    onRescheduleEvent(eventId, nextStart, nextEnd, false);
+  };
 
   return (
-    <ScrollView ref={scrollRef} style={styles.dayScroll} contentContainerStyle={styles.dayContent}>
+    <ScrollView
+      ref={scrollRef}
+      style={styles.dayScroll}
+      contentContainerStyle={styles.dayContent}
+      keyboardShouldPersistTaps="handled"
+    >
       {events.filter(event => event.allDay).length > 0 ? (
         <View style={styles.allDayStrip}>
           <Text style={styles.allDayLabel}>All-day</Text>
@@ -353,6 +371,7 @@ function DayView({
           const top = topForTimestamp(effectiveStartAt);
           const height = Math.max((eventDuration / (60 * 60 * 1000)) * HOUR_HEIGHT, HOUR_HEIGHT / 2);
           const isDragging = draggingEventId === event.id;
+
           return (
             <Animated.View
               key={event.id}
@@ -378,23 +397,57 @@ function DayView({
               ]}
             >
               <View style={styles.eventHandleWrap}>
-                <TouchableOpacity
-                  style={styles.eventHandle}
-                  delayLongPress={180}
-                  onLongPress={() => {
-                    dragRef.current = {
-                      eventId: event.id,
-                      originalStart: event.startAt,
-                      duration: eventDuration,
-                    };
-                    dragOffsetY.setValue(0);
-                    setDraggingEventId(event.id);
+                <PanGestureHandler
+                  minDist={2}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  simultaneousHandlers={scrollRef}
+                  onGestureEvent={({ nativeEvent }) => {
+                    if (dragRef.current.eventId !== event.id) return;
+                    applyPreview(event.id, event.startAt, nativeEvent.translationY);
                   }}
-                  activeOpacity={0.8}
-                  {...panResponder.panHandlers}
+                  onHandlerStateChange={({ nativeEvent }) => {
+                    if (nativeEvent.state === State.BEGAN) {
+                      console.log('[CalendarDrag] BEGAN', { eventId: event.id });
+                      dragRef.current = {
+                        eventId: event.id,
+                        originalStart: event.startAt,
+                        duration: eventDuration,
+                      };
+                      dragOffsetY.setValue(0);
+                      setDraggingEventId(event.id);
+                    }
+
+                    if (nativeEvent.state === State.ACTIVE) {
+                      console.log('[CalendarDrag] ACTIVE', {
+                        eventId: event.id,
+                        translationY: nativeEvent.translationY,
+                      });
+                      applyPreview(event.id, event.startAt, nativeEvent.translationY);
+                    }
+
+                    if (nativeEvent.state === State.END) {
+                      finishDrag(event.id, event.startAt, eventDuration, nativeEvent.translationY);
+                    }
+
+                    if (
+                      nativeEvent.state === State.CANCELLED ||
+                      nativeEvent.state === State.FAILED
+                    ) {
+                      console.log('[CalendarDrag] CANCELLED', {
+                        eventId: event.id,
+                        state: nativeEvent.state,
+                      });
+                      resetDrag(event.id);
+                    }
+                  }}
                 >
-                  <Text style={styles.eventHandleText}>|||</Text>
-                </TouchableOpacity>
+                  <View
+                    style={styles.eventHandle}
+                    onTouchStart={() => console.log('[CalendarDrag] Handle touch detected', { eventId: event.id })}
+                  >
+                    <Text style={styles.eventHandleText}>|||</Text>
+                  </View>
+                </PanGestureHandler>
               </View>
               <TouchableOpacity
                 style={styles.eventTouch}
@@ -507,14 +560,14 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 28,
+    width: 36,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 2,
   },
   eventHandle: {
-    width: 24,
-    height: 32,
+    width: 32,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -523,7 +576,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  eventTouch: { flex: 1, padding: 12, paddingLeft: 30 },
+  eventTouch: { flex: 1, padding: 12, paddingLeft: 38 },
   eventBlockTitle: { color: '#fff8f1', fontWeight: '700', fontSize: FONTS.size.sm },
   eventTypeBadge: {
     alignSelf: 'flex-start',

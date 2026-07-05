@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import {
   View,
   Text,
@@ -11,20 +11,26 @@ interface Props {
   title: string;
   subtitle?: string;
   onBack?: () => void;
+  rightAction?: ReactNode;
 }
 
-export default function TopBar({ title, subtitle, onBack }: Props) {
+export default function TopBar({ title, subtitle, onBack, rightAction }: Props) {
   return (
     <View style={styles.container}>
-      {onBack && (
-        <TouchableOpacity onPress={onBack} style={styles.backBtn} activeOpacity={0.7}>
-          <Text style={styles.backIcon}>‹</Text>
-        </TouchableOpacity>
-      )}
+      <View style={styles.sideSlot}>
+        {onBack ? (
+          <TouchableOpacity onPress={onBack} style={styles.backBtn} activeOpacity={0.7}>
+            <Text style={styles.backIcon}>{'<'}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.sideSpacer} />
+        )}
+      </View>
       <View style={styles.text}>
         {subtitle && <Text style={styles.subtitle}>{subtitle.toUpperCase()}</Text>}
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
       </View>
+      <View style={styles.sideSlot}>{rightAction || <View style={styles.sideSpacer} />}</View>
     </View>
   );
 }
@@ -35,12 +41,19 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 18,
     backgroundColor: COLORS.bg,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sideSlot: {
+    width: 36,
+    alignItems: 'center',
     justifyContent: 'center',
   },
+  sideSpacer: {
+    width: 36,
+    height: 36,
+  },
   backBtn: {
-    position: 'absolute',
-    left: 18,
-    top: 18,
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -53,6 +66,7 @@ const styles = StyleSheet.create({
     lineHeight: 32,
   },
   text: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 64,

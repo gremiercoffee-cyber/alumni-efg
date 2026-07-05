@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Audio } from 'expo-av';
 import RecordingScreen from './src/screens/RecordingScreen';
 import ProcessingScreen from './src/screens/ProcessingScreen';
@@ -919,7 +920,6 @@ export default function App() {
 
   const reviewTree = pending?.contentType === 'todo_items' ? todoTree : tree;
   const showFloatingMic = flow === 'idle' && !pending;
-  const placeFabLeft = tab === 'notes';
 
   let screen: React.ReactNode;
   if (flow === 'recording') {
@@ -1016,6 +1016,13 @@ export default function App() {
           );
         }}
         onRescheduleEvent={(eventId, startAt, endAt, allDay) => {
+          console.log('[CalendarDrag] updateScheduledItem input', {
+            eventId,
+            startAt,
+            endAt,
+            allDay,
+            nextTime: `${formatClockTime(startAt)} - ${formatClockTime(endAt)}`,
+          });
           updateScheduledItem(eventId, startAt, { durationMs: endAt - startAt });
         }}
       />
@@ -1023,102 +1030,108 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
-      <View style={styles.inner}>
-        {screen}
-        {toastMessage ? (
-          <View pointerEvents="none" style={styles.toast}>
-            <Text style={styles.toastText}>{toastMessage}</Text>
-          </View>
-        ) : null}
-        {flow === 'idle' ? (
-          <TabBar
-            active={tab}
-            onChange={nextTab => {
-              setTab(nextTab as Tab);
-              setOpenFolder(null);
-            }}
-          />
-        ) : null}
-        {showFloatingMic ? (
-          <TouchableOpacity
-            style={[styles.fab, placeFabLeft ? styles.fabLeft : styles.fabRight]}
-            onPress={openRecordingChooser}
-            activeOpacity={0.88}
-          >
-            <MaterialCommunityIcons name="microphone" size={26} color="#fff7f1" />
-          </TouchableOpacity>
-        ) : null}
-        {pending
-          ? (console.log('Review pending payload', pending),
-            (
-              <ReviewScreen
-                visible
-                pending={pending}
-                tree={reviewTree}
-                todoLists={todoLists}
-                onApprove={approvePending}
-                onDiscard={discardPending}
-              />
-            ))
-          : null}
-        {currentReminder ? (
-          <TodoReminderModal
-            visible
-            itemText={currentReminder.text}
-            initialTimestamp={currentReminderTimestamp}
-            suggestedLabel={currentReminder.suggestedDue}
-            onSkip={() => updateTodoReminder(currentReminder, null)}
-            onSave={timestamp => updateTodoReminder(currentReminder, timestamp)}
-          />
-        ) : null}
-        <Modal
-          visible={recordModeSheetOpen}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setRecordModeSheetOpen(false)}
-        >
-          <View style={styles.sheetScrim}>
-            <TouchableOpacity
-              style={styles.sheetDismissArea}
-              activeOpacity={1}
-              onPress={() => setRecordModeSheetOpen(false)}
-            />
-            <View style={styles.sheet}>
-              <Text style={styles.sheetTitle}>Choose a recording type</Text>
-              <TouchableOpacity
-                style={styles.sheetOption}
-                onPress={() => {
-                  setRecordModeSheetOpen(false);
-                  startQuickCapture();
-                }}
-                activeOpacity={0.86}
-              >
-                <Text style={styles.sheetOptionTitle}>Quick note / To-do</Text>
-                <Text style={styles.sheetOptionText}>
-                  Short capture for a note, checklist, or quick thought.
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.sheetOption}
-                onPress={startMeetingCapture}
-                activeOpacity={0.86}
-              >
-                <Text style={styles.sheetOptionTitle}>Record a meeting</Text>
-                <Text style={styles.sheetOptionText}>
-                  Longer recording with transcript, summary, and action items. It keeps recording if you switch apps.
-                </Text>
-              </TouchableOpacity>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+        <View style={styles.inner}>
+          {screen}
+          {toastMessage ? (
+            <View pointerEvents="none" style={styles.toast}>
+              <Text style={styles.toastText}>{toastMessage}</Text>
             </View>
-          </View>
-        </Modal>
-      </View>
-    </SafeAreaView>
+          ) : null}
+          {flow === 'idle' ? (
+            <TabBar
+              active={tab}
+              onChange={nextTab => {
+                setTab(nextTab as Tab);
+                setOpenFolder(null);
+              }}
+            />
+          ) : null}
+          {showFloatingMic ? (
+            <TouchableOpacity
+              style={[styles.fab, styles.fabRight]}
+              onPress={openRecordingChooser}
+              activeOpacity={0.88}
+            >
+              <MaterialCommunityIcons name="microphone" size={26} color="#fff7f1" />
+            </TouchableOpacity>
+          ) : null}
+          {pending
+            ? (console.log('Review pending payload', pending),
+              (
+                <ReviewScreen
+                  visible
+                  pending={pending}
+                  tree={reviewTree}
+                  todoLists={todoLists}
+                  onApprove={approvePending}
+                  onDiscard={discardPending}
+                />
+              ))
+            : null}
+          {currentReminder ? (
+            <TodoReminderModal
+              visible
+              itemText={currentReminder.text}
+              initialTimestamp={currentReminderTimestamp}
+              suggestedLabel={currentReminder.suggestedDue}
+              onSkip={() => updateTodoReminder(currentReminder, null)}
+              onSave={timestamp => updateTodoReminder(currentReminder, timestamp)}
+            />
+          ) : null}
+          <Modal
+            visible={recordModeSheetOpen}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setRecordModeSheetOpen(false)}
+          >
+            <View style={styles.sheetScrim}>
+              <TouchableOpacity
+                style={styles.sheetDismissArea}
+                activeOpacity={1}
+                onPress={() => setRecordModeSheetOpen(false)}
+              />
+              <View style={styles.sheet}>
+                <Text style={styles.sheetTitle}>Choose a recording type</Text>
+                <TouchableOpacity
+                  style={styles.sheetOption}
+                  onPress={() => {
+                    setRecordModeSheetOpen(false);
+                    startQuickCapture();
+                  }}
+                  activeOpacity={0.86}
+                >
+                  <Text style={styles.sheetOptionTitle}>Quick note / To-do</Text>
+                  <Text style={styles.sheetOptionText}>
+                    Short capture for a note, checklist, or quick thought.
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.sheetOption}
+                  onPress={startMeetingCapture}
+                  activeOpacity={0.86}
+                >
+                  <Text style={styles.sheetOptionTitle}>Record a meeting</Text>
+                  <Text style={styles.sheetOptionText}>
+                    Longer recording with transcript, summary, and action items. It keeps recording if you switch apps.
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        </View>
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+  },
   safe: {
     flex: 1,
     backgroundColor: COLORS.bg,
@@ -1181,9 +1194,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
     zIndex: 20,
-  },
-  fabLeft: {
-    left: 18,
   },
   fabRight: {
     right: 18,

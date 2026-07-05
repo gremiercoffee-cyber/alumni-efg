@@ -115,70 +115,48 @@ export default function FoldersScreen({
     setActionFolder(null);
   };
 
+  const openCreateModal = () => {
+    setEditingFolder(null);
+    setNameInput('');
+    setModalVisible(true);
+  };
+
   return (
     <View style={styles.container}>
-      <TopBar subtitle="Browse" title="Notes" />
+      <TopBar
+        subtitle="Browse"
+        title="Notes"
+        rightAction={
+          <TouchableOpacity style={styles.headerAction} onPress={openCreateModal} activeOpacity={0.8}>
+            <Text style={styles.headerActionIcon}>+</Text>
+          </TouchableOpacity>
+        }
+      />
 
       {tree.children.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.empty}>
             No notes yet. They'll appear here as you record notes, or you can create a category now.
           </Text>
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={() => {
-              setEditingFolder(null);
-              setNameInput('');
-              setModalVisible(true);
-            }}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity style={styles.primaryBtn} onPress={openCreateModal} activeOpacity={0.8}>
             <Text style={styles.primaryBtnText}>Create category</Text>
           </TouchableOpacity>
         </View>
       ) : (
-        <>
-          <View style={styles.hero}>
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={() => {
-                setEditingFolder(null);
-                setNameInput('');
-                setModalVisible(true);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.primaryBtnText}>New category</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView contentContainerStyle={styles.content}>
-            {tree.children.map(folder => (
-              <FolderRow
-                key={folder.id}
-                folder={folder}
-                notes={notes}
-                depth={0}
-                onOpenFolder={onOpenFolder}
-                onRenameFolder={(folderId, name) => setActionFolder({ id: folderId, name })}
-                onDeleteFolder={onDeleteFolder}
-              />
-            ))}
-          </ScrollView>
-        </>
+        <ScrollView contentContainerStyle={styles.content}>
+          {tree.children.map(folder => (
+            <FolderRow
+              key={folder.id}
+              folder={folder}
+              notes={notes}
+              depth={0}
+              onOpenFolder={onOpenFolder}
+              onRenameFolder={(folderId, name) => setActionFolder({ id: folderId, name })}
+              onDeleteFolder={onDeleteFolder}
+            />
+          ))}
+        </ScrollView>
       )}
-
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => {
-          setEditingFolder(null);
-          setNameInput('');
-          setModalVisible(true);
-        }}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.fabIcon}>+</Text>
-      </TouchableOpacity>
 
       <ActionSheetModal
         visible={!!actionFolder}
@@ -239,12 +217,7 @@ export default function FoldersScreen({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  hero: {
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-  content: { paddingVertical: 8, paddingBottom: 90 },
+  content: { paddingVertical: 8, paddingBottom: 120 },
   emptyState: {
     flex: 1,
     alignItems: 'center',
@@ -273,6 +246,20 @@ const styles = StyleSheet.create({
     color: COLORS.bg,
     fontWeight: '600',
   },
+  headerAction: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.brown,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerActionIcon: {
+    fontSize: 24,
+    color: COLORS.bg,
+    lineHeight: 24,
+    marginTop: -1,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -286,21 +273,4 @@ const styles = StyleSheet.create({
   rowName: { flex: 1, fontSize: FONTS.size.sm, color: COLORS.brown },
   rowCount: { fontSize: FONTS.size.xs, color: COLORS.brownFaint },
   rowChevron: { fontSize: 20, color: COLORS.brownFaint, lineHeight: 22 },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: COLORS.brown,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  fabIcon: { fontSize: 26, color: COLORS.bg, marginTop: -2 },
 });
