@@ -37,11 +37,24 @@ jobs:
           key: gradle-${{ hashFiles('**/*.gradle*') }}
           restore-keys: gradle-
 
+      - name: Create debug keystore
+        run: |
+          mkdir -p ~/.android
+          keytool -genkey -v \
+            -keystore ~/.android/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Print SHA1
+        run: keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android 2>&1 | grep SHA1
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
-
-      - name: Copy debug keystore
-        run: cp android/app/debug.keystore ~/.android/debug.keystore
 
       - name: Bundle JS
         run: |
