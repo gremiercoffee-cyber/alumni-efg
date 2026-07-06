@@ -2,15 +2,16 @@ import React, { useMemo, useState } from 'react';
 import {
   Alert,
   Image,
-  Pressable,
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
   Linking,
   Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
   TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ActionSheetModal from '../components/ActionSheetModal';
@@ -27,11 +28,13 @@ interface Props {
   processing: boolean;
   error: string | null;
   onDeleteItem: (itemId: string) => void;
+  onUpdateItem: (id: string, updates: Partial<KeeperItem>) => void;
   onAddText: (text: string) => void;
   onRecord: () => void;
   onRenameCategory: (categoryId: string, name: string) => void;
   onDeleteCategory: (categoryId: string) => void;
   onChangeCategoryColor: (categoryId: string, color: string) => void;
+  onAddCategory: (name: string) => string;
 }
 
 export default function KeeperScreen({
@@ -40,12 +43,16 @@ export default function KeeperScreen({
   processing,
   error,
   onDeleteItem,
+  onUpdateItem,
   onAddText,
   onRecord,
   onRenameCategory,
   onDeleteCategory,
   onChangeCategoryColor,
+  onAddCategory,
 }: Props) {
+  const { height: screenHeight } = useWindowDimensions();
+
   const [modalVisible, setModalVisible] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [draft, setDraft] = useState('');
@@ -54,18 +61,36 @@ export default function KeeperScreen({
   const [renameCategory, setRenameCategory] = useState<{ id: string; name: string } | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [brokenFavicons, setBrokenFavicons] = useState<Record<string, boolean>>({});
+
+  // Detail sheet state
+  const [detailItem, setDetailItem] = useState<KeeperItem | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState('');
+  const [editKind, setEditKind] = useState<'link' | 'text'>('text');
+  const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
+  const [newCategoryVisible, setNewCategoryVisible] = useState(false);
+  const [newCategoryDraft, setNewCategoryDraft] = useState('');
+
+  // Quick action (long-press) state
+  const [quickActionItem, setQuickActionItem] = useState<KeeperItem | null>(null);
+
   const categories = flattenFolders(keeperTree);
   const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
+
   const itemCategoryLabels = useMemo(() => {
     return items.reduce<Record<string, string>>((acc, item) => {
       acc[item.id] = folderPathLabel(item.categoryId, categories);
       return acc;
     }, {});
-  }, [items]);
+  }, [items, categories]);
+
   const filteredItems = useMemo(
     () => (activeCategoryId === 'all' ? items : items.filter(item => item.categoryId === activeCategoryId)),
     [activeCategoryId, items]
   );
+
   const columns = useMemo(() => {
     return filteredItems.reduce<[KeeperItem[], KeeperItem[]]>(
       (acc, item, index) => {
@@ -84,15 +109,49 @@ export default function KeeperScreen({
     setModalVisible(false);
   };
 
-  const confirmDelete = (item: KeeperItem) => {
-    Alert.alert('Remove from Keeper?', item.title, [
+  const confirmDeleteItem = (item: KeeperItem) => {
+    Alert.alert('Delete this item from Keeper?', item.title, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Remove',
+        text: 'Delete',
         style: 'destructive',
-        onPress: () => onDeleteItem(item.id),
+        onPress: () => {
+          if (detailItem?.id === item.id) closeDetail();
+          onDeleteItem(item.id);
+        },
       },
     ]);
+  };
+
+  const openDetail = (item: KeeperItem) => {
+    setDetailItem(item);
+    setEditMode(false);
+  };
+
+  const closeDetail = () => {
+    setDetailItem(null);
+    setEditMode(false);
+  };
+
+  const enterEditMode = (item: KeeperItem) => {
+    setEditTitle(item.title);
+    setEditContent(item.text);
+    setEditCategoryId(item.categoryId);
+    setEditKind(item.kind);
+    setEditMode(true);
+  };
+
+  const saveEdits = () => {
+    if (!detailItem) return;
+    const updates: Partial<KeeperItem> = {
+      title: editTitle.trim() || detailItem.title,
+      text: editContent,
+      categoryId: editCategoryId,
+      kind: editKind,
+    };
+    onUpdateItem(detailItem.id, updates);
+    setDetailItem({ ...detailItem, ...updates });
+    setEditMode(false);
   };
 
   const getDomain = (url: string | null) => {
@@ -112,6 +171,56 @@ export default function KeeperScreen({
   const getCategoryColor = (categoryId: string): string | null => {
     if (categoryId === 'all') return null;
     return findNode(keeperTree, categoryId)?.color || null;
+  };
+
+  const categoryLabel = (id: string) => folderPathLabel(id, categories);
+
+  // Render category chips for the edit mode picker
+  const renderCategoryPicker = () => {
+    const nonRootCategories = categories.filter(c => c.id !== 'keeper-root');
+    return (
+      <Modal visible={categoryPickerVisible} transparent animationType="fade" statusBarTranslucent>
+        <Pressable style={styles.pickerOverlay} onPress={() => setCategoryPickerVisible(false)}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>Choose category</Text>
+            <ScrollView style={styles.pickerScroll} contentContainerStyle={styles.pickerChips}>
+              {nonRootCategories.map(cat => (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={[styles.pickerChip, editCategoryId === cat.id && styles.pickerChipActive]}
+                  onPress={() => {
+                    setEditCategoryId(cat.id);
+                    setCategoryPickerVisible(false);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.pickerChipText, editCategoryId === cat.id && styles.pickerChipTextActive]}>
+                    {cat.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.pickerChipNew}
+                onPress={() => {
+                  setCategoryPickerVisible(false);
+                  setNewCategoryDraft('');
+                  setNewCategoryVisible(true);
+                }}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.pickerChipNewText}>+ New category</Text>
+              </TouchableOpacity>
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.pickerCancel}
+              onPress={() => setCategoryPickerVisible(false)}
+            >
+              <Text style={styles.pickerCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+    );
   };
 
   return (
@@ -166,23 +275,21 @@ export default function KeeperScreen({
                   const domain = getDomain(item.url);
                   const faviconUri = getFaviconUri(item.url);
                   const showFavicon = !!faviconUri && !brokenFavicons[item.id];
+                  // Show first 3-4 lines of actual content, not summary
+                  const previewText = item.text || item.summary;
 
                   return (
                     <TouchableOpacity
                       key={item.id}
                       style={styles.itemCard}
-                      activeOpacity={item.url ? 0.75 : 1}
-                      onPress={() => {
-                        if (item.url) {
-                          Linking.openURL(item.url);
-                        }
-                      }}
-                      onLongPress={() => confirmDelete(item)}
+                      activeOpacity={0.75}
+                      onPress={() => openDetail(item)}
+                      onLongPress={() => setQuickActionItem(item)}
                       delayLongPress={280}
                     >
                       <TouchableOpacity
                         style={styles.deleteBtn}
-                        onPress={() => confirmDelete(item)}
+                        onPress={() => confirmDeleteItem(item)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         <Text style={styles.deleteBtnText}>×</Text>
@@ -213,7 +320,7 @@ export default function KeeperScreen({
 
                       <Text style={styles.itemTitle} numberOfLines={3}>{item.title}</Text>
                       <Text style={styles.itemSummary} numberOfLines={4}>
-                        {item.summary || item.text}
+                        {previewText}
                       </Text>
                       <Text style={styles.itemMeta} numberOfLines={1}>
                         {domain || 'Kept note'} · {formatDate(item.ts)}
@@ -227,6 +334,7 @@ export default function KeeperScreen({
         )}
       </ScrollView>
 
+      {/* Sidebar */}
       {sidebarOpen ? (
         <View style={styles.sidebarOverlay}>
           <Pressable style={styles.sidebarDismiss} onPress={() => setSidebarOpen(false)} />
@@ -279,6 +387,7 @@ export default function KeeperScreen({
         </View>
       ) : null}
 
+      {/* Add text modal */}
       <Modal visible={modalVisible} transparent animationType="slide" statusBarTranslucent={true}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
           <View style={{ height: '88%', backgroundColor: COLORS.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }}>
@@ -315,6 +424,238 @@ export default function KeeperScreen({
         </View>
       </Modal>
 
+      {/* Detail sheet */}
+      <Modal
+        visible={!!detailItem}
+        transparent
+        animationType="slide"
+        statusBarTranslucent={true}
+        onRequestClose={closeDetail}
+      >
+        <View style={styles.detailBackdrop}>
+          <View style={[styles.detailSheet, { height: screenHeight * 0.88 }]}>
+            {/* Fixed header */}
+            <View style={styles.detailHeader}>
+              <View style={styles.detailHeaderTopRow}>
+                {/* Category pill */}
+                {editMode ? (
+                  <TouchableOpacity
+                    style={styles.detailCategoryPill}
+                    onPress={() => setCategoryPickerVisible(true)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.detailCategoryPillText} numberOfLines={1}>
+                      {categoryLabel(editCategoryId)} ▾
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.detailCategoryPill}>
+                    <Text style={styles.detailCategoryPillText} numberOfLines={1}>
+                      {detailItem ? categoryLabel(detailItem.categoryId) : ''}
+                    </Text>
+                  </View>
+                )}
+                {/* Type badge */}
+                {editMode ? (
+                  <TouchableOpacity
+                    style={styles.detailTypeBadge}
+                    onPress={() => setEditKind(k => k === 'link' ? 'text' : 'link')}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.detailTypeBadgeText}>
+                      {editKind === 'link' ? 'Link' : 'Note'} ▾
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.detailTypeBadge}>
+                    <Text style={styles.detailTypeBadgeText}>
+                      {detailItem?.kind === 'link' ? 'Link' : 'Note'}
+                    </Text>
+                  </View>
+                )}
+                <View style={{ flex: 1 }} />
+                {/* Close button */}
+                <TouchableOpacity
+                  style={styles.detailCloseBtn}
+                  onPress={editMode ? () => setEditMode(false) : closeDetail}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.detailCloseBtnText}>×</Text>
+                </TouchableOpacity>
+              </View>
+              {/* Title */}
+              {editMode ? (
+                <TextInput
+                  style={styles.detailTitleInput}
+                  value={editTitle}
+                  onChangeText={setEditTitle}
+                  placeholder="Title"
+                  placeholderTextColor={COLORS.brownFaint}
+                  multiline
+                />
+              ) : (
+                <Text style={styles.detailTitle}>{detailItem?.title}</Text>
+              )}
+            </View>
+
+            {/* Scrollable body */}
+            <ScrollView
+              style={styles.detailBody}
+              contentContainerStyle={styles.detailBodyContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {editMode ? (
+                <TextInput
+                  style={styles.detailContentInput}
+                  value={editContent}
+                  onChangeText={setEditContent}
+                  placeholder="Content..."
+                  placeholderTextColor={COLORS.brownFaint}
+                  multiline
+                  textAlignVertical="top"
+                  autoFocus
+                />
+              ) : detailItem?.kind === 'link' ? (
+                <View>
+                  {detailItem.url ? (
+                    <TouchableOpacity
+                      onPress={() => detailItem.url && Linking.openURL(detailItem.url)}
+                      activeOpacity={0.75}
+                      style={styles.detailLinkRow}
+                    >
+                      <Text style={styles.detailLinkText} numberOfLines={2}>{detailItem.url}</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {detailItem.text ? (
+                    <Text style={styles.detailContentText}>{detailItem.text}</Text>
+                  ) : null}
+                  {detailItem.url ? (
+                    <TouchableOpacity
+                      style={styles.openLinkBtn}
+                      onPress={() => detailItem.url && Linking.openURL(detailItem.url)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.openLinkBtnText}>Open link</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <Text style={styles.detailMeta}>Kept {formatDate(detailItem.ts)}</Text>
+                  <Text style={styles.detailMeta}>{categoryLabel(detailItem.categoryId)}</Text>
+                </View>
+              ) : (
+                <View>
+                  <Text style={styles.detailContentText}>{detailItem?.text || detailItem?.summary}</Text>
+                  <Text style={[styles.detailMeta, { marginTop: 20 }]}>
+                    Kept {detailItem ? formatDate(detailItem.ts) : ''}
+                  </Text>
+                  <Text style={styles.detailMeta}>
+                    {detailItem ? categoryLabel(detailItem.categoryId) : ''}
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Fixed footer */}
+            <View style={styles.detailFooter}>
+              {editMode ? (
+                <>
+                  <TouchableOpacity
+                    style={styles.footerBtnSecondary}
+                    onPress={() => setEditMode(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.footerBtnSecondaryText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.footerBtnPrimary}
+                    onPress={saveEdits}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.footerBtnPrimaryText}>Save</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.footerBtnSecondary}
+                    onPress={() => detailItem && enterEditMode(detailItem)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.footerBtnSecondaryText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.footerBtnDestructive}
+                    onPress={() => detailItem && confirmDeleteItem(detailItem)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.footerBtnDestructiveText}>Delete</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.footerBtnPrimary}
+                    onPress={closeDetail}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.footerBtnPrimaryText}>Close</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Category picker for edit mode */}
+      {renderCategoryPicker()}
+
+      {/* New category prompt */}
+      <NamePromptModal
+        visible={newCategoryVisible}
+        title="New category"
+        placeholder="Category name"
+        value={newCategoryDraft}
+        onChangeText={setNewCategoryDraft}
+        onConfirm={() => {
+          const trimmed = newCategoryDraft.trim();
+          if (!trimmed) return;
+          const newId = onAddCategory(trimmed);
+          setEditCategoryId(newId);
+          setNewCategoryVisible(false);
+          setNewCategoryDraft('');
+        }}
+        onCancel={() => {
+          setNewCategoryVisible(false);
+          setNewCategoryDraft('');
+        }}
+      />
+
+      {/* Long-press quick action sheet */}
+      <ActionSheetModal
+        visible={!!quickActionItem}
+        title={quickActionItem?.title || 'Item'}
+        message="Choose an action"
+        options={[
+          {
+            label: 'Edit',
+            onPress: () => {
+              const item = quickActionItem!;
+              setQuickActionItem(null);
+              setDetailItem(item);
+              enterEditMode(item);
+            },
+          },
+          {
+            label: 'Delete',
+            destructive: true,
+            onPress: () => {
+              const item = quickActionItem!;
+              setQuickActionItem(null);
+              confirmDeleteItem(item);
+            },
+          },
+        ]}
+        onCancel={() => setQuickActionItem(null)}
+      />
+
+      {/* Category management action sheet */}
       <ActionSheetModal
         visible={!!categoryActions}
         title={categoryActions?.name || 'Category'}
@@ -598,6 +939,8 @@ const styles = StyleSheet.create({
     color: COLORS.brownFaint,
     marginTop: 10,
   },
+
+  // Sidebar
   sidebarOverlay: {
     ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
@@ -619,9 +962,6 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.sm,
     fontWeight: '700',
     marginBottom: 12,
-  },
-  sidebarItem: {
-    backgroundColor: COLORS.brown,
   },
   sidebarItemRow: {
     flexDirection: 'row',
@@ -672,5 +1012,256 @@ const styles = StyleSheet.create({
     color: COLORS.brown,
     minHeight: 120,
     textAlignVertical: 'top',
+  },
+
+  // Detail sheet
+  detailBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  detailSheet: {
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
+  },
+  detailHeader: {
+    padding: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  detailHeaderTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  detailCategoryPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(123, 93, 72, 0.12)',
+    maxWidth: 160,
+  },
+  detailCategoryPillText: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brownLight,
+    fontWeight: '600',
+  },
+  detailTypeBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: COLORS.cream,
+  },
+  detailTypeBadgeText: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brown,
+    fontWeight: '600',
+  },
+  detailCloseBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(94, 70, 59, 0.1)',
+  },
+  detailCloseBtnText: {
+    fontSize: 18,
+    lineHeight: 20,
+    color: COLORS.brownLight,
+    fontWeight: '600',
+  },
+  detailTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: COLORS.brown,
+    lineHeight: 28,
+  },
+  detailTitleInput: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: COLORS.brown,
+    lineHeight: 28,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    padding: 8,
+    minHeight: 44,
+    textAlignVertical: 'top',
+  },
+  detailBody: {
+    flex: 1,
+  },
+  detailBodyContent: {
+    padding: 20,
+    paddingBottom: 24,
+  },
+  detailContentText: {
+    fontSize: FONTS.size.base,
+    color: COLORS.brown,
+    lineHeight: 24,
+  },
+  detailContentInput: {
+    fontSize: FONTS.size.base,
+    color: COLORS.brown,
+    lineHeight: 24,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 180,
+    textAlignVertical: 'top',
+  },
+  detailLinkRow: {
+    backgroundColor: COLORS.cream,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  detailLinkText: {
+    fontSize: FONTS.size.sm,
+    color: '#4a72b8',
+    textDecorationLine: 'underline',
+  },
+  openLinkBtn: {
+    backgroundColor: COLORS.brown,
+    borderRadius: 30,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  openLinkBtnText: {
+    color: COLORS.bg,
+    fontWeight: '600',
+    fontSize: FONTS.size.base,
+  },
+  detailMeta: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brownFaint,
+    marginTop: 6,
+  },
+  detailFooter: {
+    flexDirection: 'row',
+    padding: 16,
+    paddingBottom: 32,
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.bg,
+  },
+  footerBtnSecondary: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  footerBtnSecondaryText: {
+    color: COLORS.brownLight,
+    fontWeight: '600',
+    fontSize: FONTS.size.sm,
+  },
+  footerBtnDestructive: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: COLORS.red,
+    alignItems: 'center',
+  },
+  footerBtnDestructiveText: {
+    color: COLORS.red,
+    fontWeight: '600',
+    fontSize: FONTS.size.sm,
+  },
+  footerBtnPrimary: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 30,
+    backgroundColor: COLORS.brown,
+    alignItems: 'center',
+  },
+  footerBtnPrimaryText: {
+    color: COLORS.bg,
+    fontWeight: '600',
+    fontSize: FONTS.size.sm,
+  },
+
+  // Category picker
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  pickerSheet: {
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 36,
+    maxHeight: 400,
+  },
+  pickerTitle: {
+    fontSize: FONTS.size.sm,
+    fontWeight: '700',
+    color: COLORS.brown,
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  pickerScroll: {
+    maxHeight: 220,
+  },
+  pickerChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingBottom: 8,
+  },
+  pickerChip: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: COLORS.cream,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  pickerChipActive: {
+    backgroundColor: COLORS.brown,
+    borderColor: COLORS.brown,
+  },
+  pickerChipText: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.brown,
+  },
+  pickerChipTextActive: {
+    color: COLORS.bg,
+    fontWeight: '600',
+  },
+  pickerChipNew: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+  },
+  pickerChipNewText: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.brownLight,
+  },
+  pickerCancel: {
+    marginTop: 12,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  pickerCancelText: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.brownLight,
   },
 });

@@ -1180,11 +1180,17 @@ export default function App() {
         processing={keeperProcessing}
         error={error}
         onDeleteItem={itemId => setKeeperItems(items => items.filter(item => item.id !== itemId))}
+        onUpdateItem={(id, updates) => setKeeperItems(items => items.map(item => item.id === id ? { ...item, ...updates } : item))}
         onAddText={text => saveKeeperItem(text, null)}
         onRecord={startKeeperRecording}
         onRenameCategory={renameKeeperCategory}
         onDeleteCategory={deleteKeeperCategory}
         onChangeCategoryColor={changeKeeperCategoryColor}
+        onAddCategory={name => {
+          const added = addChildFolder(keeperTree, 'keeper-root', name, 'k');
+          setKeeperTree(added.tree);
+          return added.id;
+        }}
       />
     );
   } else if (tab === 'todos') {
