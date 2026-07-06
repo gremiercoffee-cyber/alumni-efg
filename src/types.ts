@@ -124,7 +124,6 @@ export interface TodoList {
 }
 
 export interface AppSettings {
-  openaiKey: string;
   anthropicKey: string;
   microphonePermissionAsked?: boolean;
   notificationsPermissionAsked?: boolean;

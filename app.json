@@ -2,6 +2,7 @@
   "expo": {
     "name": "NoteKeeper",
     "slug": "notekeeper",
+    "scheme": "com.gremier.notekeeper",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",

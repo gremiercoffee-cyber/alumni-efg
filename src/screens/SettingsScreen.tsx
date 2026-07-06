@@ -18,6 +18,7 @@ import { requestReminderPermissions } from '../lib/reminders';
 interface Props {
   settings: AppSettings;
   onSave: (s: AppSettings) => void;
+  onSignOut: () => void;
 }
 
 const SECTIONS: { key: keyof AppSettings; label: string; placeholder: string }[] = [
@@ -73,13 +74,11 @@ function MicSection({
   placeholder,
   value,
   onChange,
-  openaiKey,
 }: {
   label: string;
   placeholder: string;
   value: string;
   onChange: (v: string) => void;
-  openaiKey: string;
 }) {
   const [recording, setRecording] = useState(false);
   const recordingRef = React.useRef<Audio.Recording | null>(null);
@@ -92,11 +91,7 @@ function MicSection({
         await recordingRef.current.stopAndUnloadAsync();
         const uri = recordingRef.current.getURI();
         if (!uri) return;
-        if (!openaiKey) {
-          Alert.alert('No API key', 'Add your OpenAI key below first.');
-          return;
-        }
-        const transcript = await transcribeAudio(uri, openaiKey);
+        const transcript = await transcribeAudio(uri);
         onChange(value ? value + ' ' + transcript : transcript);
       } catch (e: any) {
         Alert.alert('Error', e.message);
@@ -142,7 +137,7 @@ function MicSection({
   );
 }
 
-export default function SettingsScreen({ settings, onSave }: Props) {
+export default function SettingsScreen({ settings, onSave, onSignOut }: Props) {
   const [draft, setDraft] = useState<AppSettings>({ ...settings });
 
   const update = (key: keyof AppSettings, val: string) => {
@@ -194,19 +189,6 @@ export default function SettingsScreen({ settings, onSave }: Props) {
           </Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>OPENAI API KEY (for transcription + organizing)</Text>
-          <TextInput
-            style={[styles.input, styles.keyInput]}
-            value={draft.openaiKey}
-            onChangeText={v => update('openaiKey', v)}
-            placeholder="sk-..."
-            placeholderTextColor={COLORS.brownFaint}
-            autoCapitalize="none"
-            secureTextEntry
-          />
-        </View>
-
         <View style={styles.permissionRow}>
           <TouchableOpacity style={styles.permissionBtn} onPress={requestMicAccess} activeOpacity={0.8}>
             <Text style={styles.permissionBtnText}>Enable microphone</Text>
@@ -223,12 +205,14 @@ export default function SettingsScreen({ settings, onSave }: Props) {
             placeholder={s.placeholder}
             value={draft[s.key]}
             onChange={v => update(s.key, v)}
-            openaiKey={draft.openaiKey}
           />
         ))}
 
         <TouchableOpacity style={styles.saveBtn} onPress={save} activeOpacity={0.8}>
           <Text style={styles.saveBtnText}>Save preferences</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.signOutBtn} onPress={onSignOut} activeOpacity={0.8}>
+          <Text style={styles.signOutBtnText}>Sign out</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -274,9 +258,6 @@ const styles = StyleSheet.create({
     minHeight: 72,
     textAlignVertical: 'top',
   },
-  keyInput: {
-    minHeight: 44,
-  },
   micBtn: {
     width: 36,
     height: 36,
@@ -300,6 +281,22 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: FONTS.size.md,
     color: '#f6f1e3',
+    fontWeight: '600',
+  },
+  signOutBtn: {
+    marginTop: 12,
+    minHeight: 50,
+    paddingVertical: 12,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white60,
+  },
+  signOutBtnText: {
+    fontSize: FONTS.size.md,
+    color: COLORS.brown,
     fontWeight: '600',
   },
   permissionRow: {

@@ -15,6 +15,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Audio } from 'expo-av';
+import type { Session } from '@supabase/supabase-js';
 import RecordingScreen from './src/screens/RecordingScreen';
 import ProcessingScreen from './src/screens/ProcessingScreen';
 import FoldersScreen from './src/screens/FoldersScreen';
@@ -22,12 +23,33 @@ import FolderDetailScreen from './src/screens/FolderDetailScreen';
 import KeeperScreen from './src/screens/KeeperScreen';
 import ToDosScreen from './src/screens/ToDosScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import AuthScreen from './src/screens/AuthScreen';
 import CalendarScreen from './src/screens/CalendarScreen';
 import TabBar from './src/components/TabBar';
 import TodoReminderModal from './src/components/TodoReminderModal';
-import { loadAppState, saveAppState } from './src/storage';
 import { classifyKeeperItem, classifyNote } from './src/lib/classify';
 import { transcribeAudio } from './src/lib/transcribe';
+import { supabase } from './src/lib/supabase';
+import {
+  getCalendarEvents,
+  getFolderTree,
+  getKeeperCategories,
+  getKeeperItems,
+  getTodoCategories,
+  getTodoLists,
+  getUserSettings,
+  deleteCalendarEvent as deleteDbCalendarEvent,
+  deleteKeeperItem as deleteDbKeeperItem,
+  deleteTodoList as deleteDbTodoList,
+  saveCalendarEvent as saveDbCalendarEvent,
+  saveFolderTree,
+  saveKeeperCategories,
+  saveKeeperItem as saveDbKeeperItem,
+  saveNote as saveDbNote,
+  saveTodoCategory,
+  saveTodoList as saveDbTodoList,
+  saveUserSettings,
+} from './src/lib/db';
 import {
   attachNotificationOpener,
   cancelTodoReminder,
@@ -212,7 +234,6 @@ export default function App() {
   const [todoLists, setTodoLists] = useState<TodoList[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
-    openaiKey: '',
     anthropicKey: '',
     microphonePermissionAsked: false,
     notificationsPermissionAsked: false,
@@ -229,6 +250,9 @@ export default function App() {
   const [pending, setPending] = useState<PendingCapture | null>(null);
   const [openFolder, setOpenFolder] = useState<FolderNode | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recordModeSheetOpen, setRecordModeSheetOpen] = useState(false);
   const [keeperProcessing, setKeeperProcessing] = useState(false);
@@ -242,6 +266,7 @@ export default function App() {
     completed: {},
   });
   const handledShareUrls = useRef<Set<string>>(new Set());
+  const userId = session?.user.id || null;
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -256,26 +281,80 @@ export default function App() {
   }, [tree, openFolder]);
 
   useEffect(() => {
-    loadAppState().then(s => {
-      if (s) {
-        if (s.tree) setTree(s.tree);
-        if (s.todoTree) setTodoTree(s.todoTree);
-        else if (s.tree) setTodoTree(s.tree);
-        if (s.keeperTree) setKeeperTree(s.keeperTree);
-        if (s.notes) setNotes(s.notes);
-        if (s.keeperItems) setKeeperItems(s.keeperItems);
-        if (s.todoLists) setTodoLists(s.todoLists);
-        if (s.calendarEvents) setCalendarEvents(s.calendarEvents);
-        if (s.settings) setSettings(prev => ({ ...prev, ...s.settings }));
-      }
-      setLoaded(true);
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthLoading(false);
     });
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (!loaded) return;
-    saveAppState({ tree, todoTree, keeperTree, notes, keeperItems, todoLists, calendarEvents, settings });
-  }, [tree, todoTree, keeperTree, notes, keeperItems, todoLists, calendarEvents, settings, loaded]);
+    if (!userId) {
+      setLoaded(false);
+      return;
+    }
+
+    let active = true;
+    setSyncing(true);
+    setLoaded(false);
+
+    Promise.all([
+      getFolderTree(userId),
+      getTodoCategories(userId),
+      getKeeperCategories(userId),
+      getNotes(userId),
+      getKeeperItems(userId),
+      getTodoLists(userId),
+      getCalendarEvents(userId),
+      getUserSettings(userId),
+    ])
+      .then(([nextTree, todoCategories, nextKeeperTree, nextNotes, nextKeeperItems, nextTodoLists, nextCalendarEvents, nextSettings]) => {
+        if (!active) return;
+        setTree(nextTree);
+        setTodoTree(todoCategories[0] || EMPTY_TREE);
+        setKeeperTree(nextKeeperTree);
+        setNotes(nextNotes);
+        setKeeperItems(nextKeeperItems);
+        setTodoLists(nextTodoLists);
+        setCalendarEvents(nextCalendarEvents);
+        if (nextSettings) setSettings(prev => ({ ...prev, ...nextSettings }));
+        setLoaded(true);
+      })
+      .catch(errorValue => {
+        console.error('Supabase load error', errorValue);
+        if (active) setError('Could not load your synced data.');
+      })
+      .finally(() => {
+        if (active) setSyncing(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!loaded || !userId) return;
+    Promise.all([
+      saveFolderTree(userId, tree),
+      saveTodoCategory(userId, todoTree),
+      saveKeeperCategories(userId, keeperTree),
+      ...notes.map(note => saveDbNote(userId, note)),
+      ...keeperItems.map(item => saveDbKeeperItem(userId, item)),
+      ...todoLists.map(list => saveDbTodoList(userId, list)),
+      ...calendarEvents.map(event => saveDbCalendarEvent(userId, event)),
+      saveUserSettings(userId, settings),
+    ]).catch(errorValue => {
+      console.error('Supabase save error', errorValue);
+      setError('Could not sync your latest change.');
+    });
+  }, [tree, todoTree, keeperTree, notes, keeperItems, todoLists, calendarEvents, settings, loaded, userId]);
 
   useEffect(() => {
     if (!loaded || settings.microphonePermissionAsked) return;
@@ -324,16 +403,11 @@ export default function App() {
       handleIncomingUrl(event.url);
     });
     return () => subscription.remove();
-  }, [keeperTree, settings.openaiKey]);
+  }, [keeperTree]);
 
   const saveKeeperItem = async (text: string, url?: string | null) => {
     setTab('keeper');
     setError(null);
-
-    if (!settings.openaiKey) {
-      setError('No OpenAI key. Add it in Settings first.');
-      return;
-    }
 
     setKeeperProcessing(true);
     try {
@@ -341,7 +415,6 @@ export default function App() {
         text,
         url: url || null,
         keeperTree,
-        openaiKey: settings.openaiKey,
       });
 
       let nextKeeperTree = keeperTree;
@@ -407,8 +480,7 @@ export default function App() {
 
   const handleRecordingComplete = async (audioUri: string) => {
     try {
-      if (!settings.openaiKey) throw new Error('No OpenAI key. Add it in Settings first.');
-      const transcript = await transcribeAudio(audioUri, settings.openaiKey);
+      const transcript = await transcribeAudio(audioUri);
 
       if (captureTarget === 'keeper') {
         await saveKeeperItem(transcript, null);
@@ -421,7 +493,6 @@ export default function App() {
         folderList,
         todoLists,
         settings,
-        openaiKey: settings.openaiKey,
       });
       setPending({ ...classification, transcript, id: makeId('pending') } as PendingCapture);
       setFlow('idle');
@@ -519,6 +590,7 @@ export default function App() {
   const syncLinkedEventForTodo = (listId: string, folderId: string, item: TodoItem): TodoItem => {
     if (!item.reminderAt) {
       if (item.eventId) {
+        if (userId) deleteDbCalendarEvent(userId, item.eventId).catch(console.error);
         setCalendarEvents(events => events.filter(event => event.id !== item.eventId));
       }
       return { ...item, eventId: null };
@@ -847,6 +919,7 @@ export default function App() {
     const notificationId = linked?.item.notificationId || null;
     if (notificationId) await cancelTodoReminder(notificationId);
 
+    if (userId) deleteDbCalendarEvent(userId, eventId).catch(console.error);
     setCalendarEvents(events => events.filter(event => event.id !== eventId));
 
     if (linked) {
@@ -922,6 +995,7 @@ export default function App() {
   const deleteTodoItem = async (listId: string, itemId: string) => {
     const item = todoLists.find(list => list.id === listId)?.items.find(todo => todo.id === itemId);
     if (item?.notificationId) await cancelTodoReminder(item.notificationId);
+    if (userId && item?.eventId) await deleteDbCalendarEvent(userId, item.eventId);
     setTodoLists(lists =>
       lists.map(list => (list.id === listId ? { ...list, items: list.items.filter(todo => todo.id !== itemId) } : list))
     );
@@ -937,6 +1011,14 @@ export default function App() {
         .filter((notificationId): notificationId is string => !!notificationId)
         .map(notificationId => cancelTodoReminder(notificationId))
     );
+    if (userId) {
+      await Promise.all([
+        deleteDbTodoList(userId, listId),
+        ...calendarEvents
+          .filter(event => event.todoListId === listId)
+          .map(event => deleteDbCalendarEvent(userId, event.id)),
+      ]);
+    }
     setTodoLists(lists => lists.filter(entry => entry.id !== listId));
     setCalendarEvents(events => events.filter(event => event.todoListId !== listId));
     if (todoFocusListId === listId) {
@@ -971,6 +1053,18 @@ export default function App() {
           .map(notificationId => cancelTodoReminder(notificationId))
       )
     );
+    if (userId) {
+      await Promise.all([
+        ...listsToDelete.map(list => deleteDbTodoList(userId, list.id)),
+        ...calendarEvents
+          .filter(
+            event =>
+              descendantIds.has(event.categoryFolderId || '') ||
+              listsToDelete.some(list => list.id === event.todoListId)
+          )
+          .map(event => deleteDbCalendarEvent(userId, event.id)),
+      ]);
+    }
     setTodoTree(current => deleteFolder(current, folderId));
     setTodoLists(lists => lists.filter(list => !descendantIds.has(list.folderId)));
     setCalendarEvents(events =>
@@ -1133,6 +1227,43 @@ export default function App() {
   const reviewTree = pending?.contentType === 'todo_items' ? todoTree : tree;
   const showFloatingMic = flow === 'idle' && !pending;
 
+  if (authLoading) {
+    return (
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaView style={styles.safe}>
+          <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+          <View style={styles.loadingScreen}>
+            <Text style={styles.loadingTitle}>Opening NoteKeeper...</Text>
+          </View>
+        </SafeAreaView>
+      </GestureHandlerRootView>
+    );
+  }
+
+  if (!session) {
+    return (
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaView style={styles.safe}>
+          <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+          <AuthScreen />
+        </SafeAreaView>
+      </GestureHandlerRootView>
+    );
+  }
+
+  if (!loaded || syncing) {
+    return (
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaView style={styles.safe}>
+          <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+          <View style={styles.loadingScreen}>
+            <Text style={styles.loadingTitle}>Syncing your notes...</Text>
+          </View>
+        </SafeAreaView>
+      </GestureHandlerRootView>
+    );
+  }
+
   let screen: React.ReactNode;
   if (flow === 'recording') {
     screen = (
@@ -1179,7 +1310,10 @@ export default function App() {
         items={keeperItems}
         processing={keeperProcessing}
         error={error}
-        onDeleteItem={itemId => setKeeperItems(items => items.filter(item => item.id !== itemId))}
+        onDeleteItem={itemId => {
+          if (userId) deleteDbKeeperItem(userId, itemId).catch(console.error);
+          setKeeperItems(items => items.filter(item => item.id !== itemId));
+        }}
         onUpdateItem={(id, updates) => setKeeperItems(items => items.map(item => item.id === id ? { ...item, ...updates } : item))}
         onAddText={text => saveKeeperItem(text, null)}
         onRecord={startKeeperRecording}
@@ -1218,7 +1352,7 @@ export default function App() {
       />
     );
   } else if (tab === 'settings') {
-    screen = <SettingsScreen settings={settings} onSave={setSettings} />;
+    screen = <SettingsScreen settings={settings} onSave={setSettings} onSignOut={() => supabase.auth.signOut()} />;
   } else {
     screen = (
       <CalendarScreen
@@ -1420,6 +1554,18 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   inner: { flex: 1 },
+  loadingScreen: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.bg,
+    padding: 24,
+  },
+  loadingTitle: {
+    color: COLORS.brown,
+    fontSize: FONTS.size.lg,
+    fontWeight: '700',
+  },
   sheetScrim: {
     flex: 1,
     backgroundColor: 'rgba(45, 36, 29, 0.28)',
