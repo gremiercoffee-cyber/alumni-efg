@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { COLOR_PALETTE } from '../constants';
 
 interface Props {
@@ -17,8 +17,8 @@ export default function ColorPickerModal({
 }: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={styles.overlay}>
-        <View style={styles.box}>
+      <Pressable style={styles.overlay} onPress={onCancel}>
+        <Pressable style={styles.box} onPress={e => e.stopPropagation()}>
           <Text style={styles.title}>Choose a color</Text>
           <View style={styles.grid}>
             {COLOR_PALETTE.map(color => {
@@ -44,8 +44,8 @@ export default function ColorPickerModal({
           <TouchableOpacity onPress={onCancel} style={styles.cancel} activeOpacity={0.82}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }

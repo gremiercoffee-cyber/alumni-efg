@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { COLORS, FONTS } from '../constants';
 
 export interface ActionSheetOption {
@@ -28,7 +28,7 @@ export default function ActionSheetModal({
   return (
     <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={onCancel}>
       <View style={styles.overlay}>
-        <View style={styles.backdrop} />
+        <Pressable style={styles.backdrop} onPress={onCancel} />
         <View style={styles.sheetWrap}>
           <View style={styles.sheet}>
             <Text style={styles.title}>{title}</Text>

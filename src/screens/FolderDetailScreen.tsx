@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  BackHandler,
   ScrollView,
   Share,
   StyleSheet,
@@ -35,6 +36,16 @@ export default function FolderDetailScreen({
 }: Props) {
   const [actionFolder, setActionFolder] = useState<{ id: string; name: string } | null>(null);
   const [renameFolderState, setRenameFolderState] = useState<{ id: string; name: string } | null>(null);
+
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (renameFolderState) { setRenameFolderState(null); return true; }
+      if (actionFolder) { setActionFolder(null); return true; }
+      onBack();
+      return true;
+    });
+    return () => handler.remove();
+  }, [actionFolder, renameFolderState]);
   const [renameDraft, setRenameDraft] = useState('');
   const folderIds = new Set<string>();
   function collectIds(node: FolderNode) {

@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  BackHandler,
   Image,
   Linking,
   Modal,
@@ -76,6 +77,19 @@ export default function KeeperScreen({
 
   // Quick action (long-press) state
   const [quickActionItem, setQuickActionItem] = useState<KeeperItem | null>(null);
+
+  // Android back button: close open panels in priority order
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (editMode) { setEditMode(false); return true; }
+      if (detailItem) { closeDetail(); return true; }
+      if (categoryPickerVisible) { setCategoryPickerVisible(false); return true; }
+      if (sidebarOpen) { setSidebarOpen(false); return true; }
+      if (modalVisible) { setModalVisible(false); return true; }
+      return false;
+    });
+    return () => handler.remove();
+  }, [editMode, detailItem, categoryPickerVisible, sidebarOpen, modalVisible]);
 
   const categories = flattenFolders(keeperTree);
   const [activeCategoryId, setActiveCategoryId] = useState<string>('all');
@@ -445,8 +459,8 @@ export default function KeeperScreen({
         statusBarTranslucent={true}
         onRequestClose={closeDetail}
       >
-        <View style={styles.detailBackdrop}>
-          <View style={[styles.detailSheet, { height: screenHeight * 0.88 }]}>
+        <Pressable style={styles.detailBackdrop} onPress={editMode ? () => setEditMode(false) : closeDetail}>
+          <Pressable style={[styles.detailSheet, { height: screenHeight * 0.88 }]} onPress={e => e.stopPropagation()}>
             {/* Fixed header */}
             <View style={styles.detailHeader}>
               <View style={styles.detailHeaderTopRow}>
@@ -626,8 +640,8 @@ export default function KeeperScreen({
                 </>
               )}
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* Category picker for edit mode */}

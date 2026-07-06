@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { COLORS, FONTS } from '../constants';
 
 interface Props {
@@ -25,8 +25,8 @@ export default function NamePromptModal({
 }: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
-      <View style={styles.overlay}>
-        <View style={styles.box}>
+      <Pressable style={styles.overlay} onPress={onCancel}>
+        <Pressable style={styles.box} onPress={e => e.stopPropagation()}>
           <Text style={styles.title}>{title}</Text>
           <TextInput
             style={styles.input}
@@ -46,8 +46,8 @@ export default function NamePromptModal({
               <Text style={styles.confirmText}>{confirmLabel}</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }

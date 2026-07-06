@@ -432,6 +432,7 @@ function FolderSection({
   onDeleteList,
   onRenameCategory,
   onChangeCategoryColor,
+  onAddList,
 }: {
   folder: FolderNode;
   todoLists: TodoList[];
