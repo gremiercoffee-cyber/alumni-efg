@@ -1,49 +1,42 @@
-import React, { useState } from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import * as AuthSession from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
+import React, { useEffect, useState } from 'react';
+import { Alert, StyleSheet, Text, View } from 'react-native';
+import { GoogleSignin, GoogleSigninButton, isSuccessResponse, statusCodes } from '@react-native-google-signin/google-signin';
 import { COLORS, FONTS } from '../constants';
 import { supabase } from '../lib/supabase';
 
-WebBrowser.maybeCompleteAuthSession();
+const GOOGLE_WEB_CLIENT_ID = '828739249323-ibtlal9p01vodk47ne68dfcf5ck84b18.apps.googleusercontent.com';
 
 export default function AuthScreen() {
   const [busy, setBusy] = useState(false);
 
-  const signIn = async () => {
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: GOOGLE_WEB_CLIENT_ID,
+      scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+    });
+  }, []);
+
+  const signInWithGoogle = async () => {
     setBusy(true);
     try {
-      const redirectTo = AuthSession.makeRedirectUri({ scheme: 'com.gremier.notekeeper' });
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      if (!isSuccessResponse(userInfo)) return;
+
+      const idToken = userInfo.data?.idToken;
+
+      if (!idToken) throw new Error('No ID token returned');
+
+      const { error } = await supabase.auth.signInWithIdToken({
         provider: 'google',
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
+        token: idToken,
       });
+
       if (error) throw error;
-      if (!data.url) throw new Error('Google sign-in could not start.');
-
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-      if (result.type !== 'success') return;
-
-      const params = new URL(result.url).searchParams;
-      const code = params.get('code');
-      if (code) {
-        const sessionResult = await supabase.auth.exchangeCodeForSession(code);
-        if (sessionResult.error) throw sessionResult.error;
-        return;
-      }
-
-      const hashParams = new URLSearchParams(result.url.split('#')[1] || '');
-      const access_token = hashParams.get('access_token');
-      const refresh_token = hashParams.get('refresh_token');
-      if (access_token && refresh_token) {
-        const sessionResult = await supabase.auth.setSession({ access_token, refresh_token });
-        if (sessionResult.error) throw sessionResult.error;
-      }
     } catch (error: any) {
-      Alert.alert('Sign-in failed', error.message || 'Could not sign in with Google.');
+      if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
+        Alert.alert('Sign in failed', error.message || 'Could not sign in with Google.');
+      }
     } finally {
       setBusy(false);
     }
@@ -56,9 +49,13 @@ export default function AuthScreen() {
         <Text style={styles.title}>Welcome back</Text>
         <Text style={styles.subtitle}>Sign in to sync your notes, lists, calendar, and keeper items.</Text>
       </View>
-      <TouchableOpacity style={[styles.button, busy && styles.buttonDisabled]} onPress={signIn} disabled={busy} activeOpacity={0.86}>
-        <Text style={styles.buttonText}>{busy ? 'Opening Google...' : 'Continue with Google'}</Text>
-      </TouchableOpacity>
+      <GoogleSigninButton
+        style={[styles.googleButton, busy && styles.buttonDisabled]}
+        size={GoogleSigninButton.Size.Wide}
+        color={GoogleSigninButton.Color.Light}
+        onPress={signInWithGoogle}
+        disabled={busy}
+      />
     </View>
   );
 }
@@ -94,21 +91,11 @@ const styles = StyleSheet.create({
     maxWidth: 300,
     textAlign: 'center',
   },
-  button: {
-    backgroundColor: COLORS.brown,
-    borderRadius: 30,
-    minHeight: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-    minWidth: 240,
+  googleButton: {
+    width: 240,
+    height: 56,
   },
   buttonDisabled: {
     opacity: 0.65,
-  },
-  buttonText: {
-    color: '#fff7f1',
-    fontSize: FONTS.size.base,
-    fontWeight: '700',
   },
 });
