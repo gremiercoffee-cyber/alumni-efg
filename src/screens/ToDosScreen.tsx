@@ -485,12 +485,14 @@ function FolderSection({
       <View style={styles.folderHeader}>
         <TouchableOpacity
           style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 14 }}
-          onPress={() =>
-            onExpandedFoldersChange(current => ({
-              ...current,
-              [folder.id]: !(current[folder.id] ?? false),
-            }))
-          }
+          onPress={() => {
+            const isExpanding = !(expandedFolders[folder.id] ?? false);
+            onExpandedFoldersChange(current => ({ ...current, [folder.id]: isExpanding }));
+            if (isExpanding && listsInFolder.length > 0) {
+              const mostRecent = listsInFolder.reduce((a, b) => a.ts > b.ts ? a : b);
+              onExpandedListsChange(current => ({ ...current, [mostRecent.id]: true }));
+            }
+          }}
           onLongPress={() => {
             setRenameDraft(folder.name);
             setActionsOpen(true);

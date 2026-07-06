@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -123,14 +124,16 @@ export default function KeeperScreen({
     ]);
   };
 
-  const openDetail = (item: KeeperItem) => {
-    setDetailItem(item);
-    setEditMode(false);
-  };
-
   const closeDetail = () => {
     setDetailItem(null);
     setEditMode(false);
+  };
+
+  const shareItem = (item: KeeperItem) => {
+    const message = item.url
+      ? `${item.title}\n${item.url}${item.text ? '\n\n' + item.text : ''}`
+      : `${item.title}\n\n${item.text}`;
+    Share.share({ title: item.title, message });
   };
 
   const enterEditMode = (item: KeeperItem) => {
@@ -283,7 +286,7 @@ export default function KeeperScreen({
                       key={item.id}
                       style={styles.itemCard}
                       activeOpacity={0.75}
-                      onPress={() => openDetail(item)}
+                      onPress={() => { setDetailItem(item); enterEditMode(item); }}
                       onLongPress={() => setQuickActionItem(item)}
                       delayLongPress={280}
                     >
@@ -322,9 +325,19 @@ export default function KeeperScreen({
                       <Text style={styles.itemSummary} numberOfLines={4}>
                         {previewText}
                       </Text>
-                      <Text style={styles.itemMeta} numberOfLines={1}>
-                        {domain || 'Kept note'} · {formatDate(item.ts)}
-                      </Text>
+                      <View style={styles.cardBottomRow}>
+                        <Text style={styles.itemMeta} numberOfLines={1}>
+                          {domain || 'Kept note'} · {formatDate(item.ts)}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.cardShareBtn}
+                          onPress={() => shareItem(item)}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.cardShareBtnText}>↑</Text>
+                        </TouchableOpacity>
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
@@ -566,6 +579,13 @@ export default function KeeperScreen({
                     <Text style={styles.footerBtnSecondaryText}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
+                    style={styles.footerBtnSecondary}
+                    onPress={() => detailItem && shareItem({ ...detailItem, title: editTitle, text: editContent })}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.footerBtnSecondaryText}>Share</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
                     style={styles.footerBtnPrimary}
                     onPress={saveEdits}
                     activeOpacity={0.8}
@@ -581,6 +601,13 @@ export default function KeeperScreen({
                     activeOpacity={0.8}
                   >
                     <Text style={styles.footerBtnSecondaryText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.footerBtnSecondary}
+                    onPress={() => detailItem && shareItem(detailItem)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.footerBtnSecondaryText}>Share</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.footerBtnDestructive}
@@ -934,10 +961,33 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 17,
   },
+  cardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
   itemMeta: {
     fontSize: FONTS.size.xs,
     color: COLORS.brownFaint,
-    marginTop: 10,
+    flex: 1,
+  },
+  cardShareBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.cream,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    marginLeft: 6,
+  },
+  cardShareBtnText: {
+    fontSize: 12,
+    lineHeight: 14,
+    color: COLORS.brownLight,
+    fontWeight: '600',
   },
 
   // Sidebar

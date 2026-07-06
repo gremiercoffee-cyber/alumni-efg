@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Alert,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -109,7 +110,16 @@ export default function FolderDetailScreen({
                     </View>
                   )}
                 </View>
-                <SpeakButton text={`${n.title}. ${n.summary}`} />
+                <View style={styles.cardActions}>
+                  <TouchableOpacity
+                    style={styles.shareBtn}
+                    onPress={() => Share.share({ title: n.title, message: `${n.title}\n\n${n.summary}` })}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.shareBtnText}>↑</Text>
+                  </TouchableOpacity>
+                  <SpeakButton text={`${n.title}. ${n.summary}`} />
+                </View>
               </View>
             </View>
           ))
@@ -231,6 +241,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   noteCardText: { flex: 1 },
+  cardActions: { flexDirection: 'column', alignItems: 'center', gap: 6 },
+  shareBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.cream,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  shareBtnText: { fontSize: 14, color: COLORS.brownLight, fontWeight: '600' },
   noteTitle: {
     fontSize: FONTS.size.md,
     fontWeight: '600',

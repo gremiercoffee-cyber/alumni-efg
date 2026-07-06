@@ -4,6 +4,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
+  Share,
   StyleSheet,
 } from 'react-native';
 import TopBar from '../components/TopBar';
@@ -11,6 +12,9 @@ import SpeakButton from '../components/SpeakButton';
 import { COLORS, FONTS } from '../constants';
 import { formatDate } from '../utils';
 import { Note } from '../types';
+
+const shareNote = (n: Note) =>
+  Share.share({ title: n.title, message: `${n.title}\n\n${n.summary}` });
 
 interface Props {
   notes: Note[];
@@ -83,7 +87,12 @@ export default function HomeScreen({
               <Text style={styles.noteSummary} numberOfLines={2}>{n.summary}</Text>
               <Text style={styles.noteDate}>{formatDate(n.ts)}</Text>
             </View>
-            <SpeakButton text={`${n.title}. ${n.summary}`} />
+            <View style={styles.noteCardActions}>
+              <TouchableOpacity style={styles.shareBtn} onPress={() => shareNote(n)} activeOpacity={0.75}>
+                <Text style={styles.shareBtnText}>↑</Text>
+              </TouchableOpacity>
+              <SpeakButton text={`${n.title}. ${n.summary}`} />
+            </View>
           </View>
         ))}
       </ScrollView>
@@ -180,6 +189,18 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   noteCardText: { flex: 1 },
+  noteCardActions: { flexDirection: 'column', alignItems: 'center', gap: 6 },
+  shareBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.cream,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  shareBtnText: { fontSize: 14, color: COLORS.brownLight, fontWeight: '600' },
   noteTitle: { fontSize: FONTS.size.sm, fontWeight: '600', color: COLORS.brown },
   noteSummary: { fontSize: FONTS.size.xs, color: COLORS.brownLight, marginTop: 2 },
   noteDate: { fontSize: FONTS.size.xs, color: COLORS.brownFaint, marginTop: 4 },

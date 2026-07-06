@@ -1240,6 +1240,9 @@ export default function App() {
           });
           updateScheduledItem(eventId, startAt, { durationMs: endAt - startAt });
         }}
+        onUpdateEvent={(eventId, title, startAt, endAt, eventType) => {
+          updateScheduledItem(eventId, startAt, { title, durationMs: endAt - startAt, eventType });
+        }}
       />
     );
   }

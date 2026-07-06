@@ -5,6 +5,7 @@ import {
   Modal,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -43,6 +44,7 @@ interface Props {
   onDeleteEvent: (eventId: string) => void | Promise<void>;
   onDeleteEventAndTodo: (eventId: string) => void | Promise<void>;
   onOpenLinkedTodo: (eventId: string) => void;
+  onUpdateEvent: (eventId: string, title: string, startAt: number, endAt: number, eventType: CalendarEvent['eventType']) => void;
 }
 
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
@@ -60,6 +62,7 @@ export default function CalendarScreen({
   onDeleteEvent,
   onDeleteEventAndTodo,
   onOpenLinkedTodo,
+  onUpdateEvent,
 }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
@@ -186,6 +189,7 @@ export default function CalendarScreen({
       {viewMode === 'day' ? (
         <DayView
           todoTree={todoTree}
+          todoLists={todoLists}
           day={selectedDate}
           events={dayEvents}
           onOpenEvent={event => {
@@ -256,7 +260,10 @@ export default function CalendarScreen({
                             {event.title}
                           </Text>
                         </View>
-                        <Text style={styles.weekEventBadge}>{EVENT_TYPE_LABELS[event.eventType]}</Text>
+                        <Text style={styles.weekEventBadge}>
+                          {EVENT_TYPE_LABELS[event.eventType]}
+                          {(() => { const list = todoLists.find(l => l.id === event.todoListId); return list ? ` · ${list.title}` : ''; })()}
+                        </Text>
                         <Text style={styles.weekEventTime}>
                           {event.allDay ? 'All day' : `${formatClockTime(event.startAt)} - ${formatClockTime(event.endAt)}`}
                         </Text>
@@ -330,8 +337,12 @@ export default function CalendarScreen({
           setSelectedEventId(null);
           onOpenLinkedTodo(selectedEvent.id);
         }}
+        onToggleEventDone={eventId => onToggleEventDone(eventId)}
         onDeleteEvent={event => confirmDeleteEvent(event)}
         onDeleteEventAndTodo={event => confirmDeleteEventAndTodo(event)}
+        onSaveEdits={(eventId, title, startAt, endAt, eventType) =>
+          onUpdateEvent(eventId, title, startAt, endAt, eventType)
+        }
       />
     </View>
   );
@@ -339,6 +350,7 @@ export default function CalendarScreen({
 
 function DayView({
   todoTree,
+  todoLists,
   day,
   events,
   onOpenEvent,
@@ -347,6 +359,7 @@ function DayView({
   onRescheduleEvent,
 }: {
   todoTree: FolderNode;
+  todoLists: TodoList[];
   day: Date;
   events: CalendarEvent[];
   onOpenEvent: (event: CalendarEvent) => void;
@@ -354,6 +367,10 @@ function DayView({
   onToggleEventDone: (eventId: string) => void | Promise<void>;
   onRescheduleEvent: (eventId: string, startAt: number, endAt: number, allDay: boolean) => void;
 }) {
+  const getListName = (event: CalendarEvent): string | null => {
+    if (!event.todoListId) return null;
+    return todoLists.find(l => l.id === event.todoListId)?.title || null;
+  };
   const scrollRef = useRef<any>(null);
   const dragOffsetY = useRef(new Animated.Value(0)).current;
   const dragRef = useRef<{ eventId: string | null; originalStart: number; duration: number }>({
@@ -622,7 +639,9 @@ function DayView({
                     {event.title}
                   </Text>
                 </View>
-                <Text style={styles.eventTypeBadge}>{EVENT_TYPE_LABELS[event.eventType]}</Text>
+                <Text style={styles.eventTypeBadge}>
+                  {EVENT_TYPE_LABELS[event.eventType]}{getListName(event) ? ` · ${getListName(event)}` : ''}
+                </Text>
                 <Text style={styles.eventBlockTime}>
                   {formatClockTime(effectiveStartAt)} - {formatClockTime(effectiveEndAt)}
                 </Text>
@@ -636,79 +655,205 @@ function DayView({
   );
 }
 
+const EVENT_TYPES: CalendarEvent['eventType'][] = [
+  'meeting', 'reminder', 'task', 'appointment', 'personal', 'delivery', 'shiur', 'other',
+];
+
+const STEP_MS = 15 * 60 * 1000;
+
 function EventDetailModal({
   event,
   linkedTodo,
   categoryLabel,
   onClose,
   onOpenLinkedTodo,
+  onToggleEventDone,
   onDeleteEvent,
   onDeleteEventAndTodo,
+  onSaveEdits,
 }: {
   event: CalendarEvent | null;
   linkedTodo: { list: TodoList; item: TodoList['items'][number] } | null;
   categoryLabel: string;
   onClose: () => void;
   onOpenLinkedTodo: () => void;
+  onToggleEventDone: (eventId: string) => void;
   onDeleteEvent: (event: CalendarEvent) => void;
   onDeleteEventAndTodo: (event: CalendarEvent) => void;
+  onSaveEdits: (eventId: string, title: string, startAt: number, endAt: number, eventType: CalendarEvent['eventType']) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftStart, setDraftStart] = useState(0);
+  const [draftEnd, setDraftEnd] = useState(0);
+  const [draftType, setDraftType] = useState<CalendarEvent['eventType']>('task');
+
+  // Reset edit state whenever a new event opens
+  useEffect(() => {
+    if (event) {
+      setEditing(false);
+      setDraftTitle(event.title);
+      setDraftStart(event.startAt);
+      setDraftEnd(event.endAt);
+      setDraftType(event.eventType);
+    }
+  }, [event?.id]);
+
   if (!event) return null;
+
   const dateLabel = new Date(event.startAt).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+    weekday: 'long', month: 'short', day: 'numeric', year: 'numeric',
   });
-  const timeLabel = event.allDay ? 'All day' : `${formatClockTime(event.startAt)} - ${formatClockTime(event.endAt)}`;
+
+  const saveAndClose = () => {
+    onSaveEdits(event.id, draftTitle.trim() || event.title, draftStart, draftEnd, draftType);
+    setEditing(false);
+  };
+
+  const cancelEdit = () => {
+    setDraftTitle(event.title);
+    setDraftStart(event.startAt);
+    setDraftEnd(event.endAt);
+    setDraftType(event.eventType);
+    setEditing(false);
+  };
 
   return (
-    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={editing ? cancelEdit : onClose}>
       <View style={styles.detailScrim}>
-        <TouchableOpacity style={styles.detailDismissArea} activeOpacity={1} onPress={onClose} />
+        <TouchableOpacity style={styles.detailDismissArea} activeOpacity={1} onPress={editing ? cancelEdit : onClose} />
         <View style={styles.detailSheet}>
+          {/* Header */}
           <View style={styles.detailHeader}>
             <View style={styles.detailTitleWrap}>
-              <Text style={styles.detailEyebrow}>{EVENT_TYPE_LABELS[event.eventType]}</Text>
-              <Text style={styles.detailTitle}>{event.title}</Text>
+              {editing ? (
+                <TextInput
+                  style={styles.detailTitleInput}
+                  value={draftTitle}
+                  onChangeText={setDraftTitle}
+                  autoFocus
+                  multiline
+                  returnKeyType="done"
+                />
+              ) : (
+                <>
+                  <Text style={styles.detailEyebrow}>{EVENT_TYPE_LABELS[event.eventType]}</Text>
+                  <Text style={styles.detailTitle}>{event.title}</Text>
+                </>
+              )}
             </View>
-            <TouchableOpacity style={styles.detailCloseBtn} onPress={onClose} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.detailCloseBtn} onPress={editing ? cancelEdit : onClose} activeOpacity={0.8}>
               <Text style={styles.detailCloseText}>x</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.detailRows}>
-            <Text style={styles.detailRowText}>Date: {dateLabel}</Text>
-            <Text style={styles.detailRowText}>Time: {timeLabel}</Text>
-            <Text style={styles.detailRowText}>Category: {categoryLabel}</Text>
-            <Text style={styles.detailRowText}>Status: {event.done ? 'Done' : 'Open'}</Text>
-            {linkedTodo ? (
-              <TouchableOpacity style={styles.linkedTodoRow} onPress={onOpenLinkedTodo} activeOpacity={0.82}>
-                <Text style={styles.linkedTodoText}>To-do list: {linkedTodo.list.title}</Text>
-                <Text style={styles.linkedTodoHint}>Open linked to-do</Text>
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.detailRowText}>To-do list: Not linked</Text>
-            )}
-          </View>
-
-          <View style={styles.detailActions}>
-            <TouchableOpacity
-              style={styles.detailDeleteBtn}
-              onPress={() => onDeleteEvent(event)}
-              activeOpacity={0.82}
-            >
-              <Text style={styles.detailDeleteText}>Delete event</Text>
-            </TouchableOpacity>
-            {linkedTodo ? (
+          {/* Read mode info rows */}
+          {!editing ? (
+            <View style={styles.detailRows}>
+              <Text style={styles.detailRowText}>Date: {dateLabel}</Text>
+              <Text style={styles.detailRowText}>
+                Time: {event.allDay ? 'All day' : `${formatClockTime(event.startAt)} – ${formatClockTime(event.endAt)}`}
+              </Text>
+              <Text style={styles.detailRowText}>Category: {categoryLabel}</Text>
               <TouchableOpacity
-                style={styles.detailDeleteStrongBtn}
-                onPress={() => onDeleteEventAndTodo(event)}
-                activeOpacity={0.82}
+                style={styles.detailStatusRow}
+                onPress={() => onToggleEventDone(event.id)}
+                activeOpacity={0.8}
               >
-                <Text style={styles.detailDeleteStrongText}>Delete event and to-do</Text>
+                <Text style={styles.detailRowText}>Status: {event.done ? 'Done ✓' : 'Open'}</Text>
+                <Text style={styles.detailStatusToggle}>{event.done ? 'Mark open' : 'Mark done'}</Text>
               </TouchableOpacity>
-            ) : null}
+              {linkedTodo ? (
+                <TouchableOpacity style={styles.linkedTodoRow} onPress={onOpenLinkedTodo} activeOpacity={0.82}>
+                  <Text style={styles.linkedTodoText}>To-do list: {linkedTodo.list.title}</Text>
+                  <Text style={styles.linkedTodoHint}>Open linked to-do →</Text>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.detailRowText}>To-do list: Not linked</Text>
+              )}
+            </View>
+          ) : (
+            /* Edit mode fields */
+            <View style={styles.detailEditFields}>
+              {/* Time editing */}
+              <Text style={styles.editFieldLabel}>Start time</Text>
+              <View style={styles.timeRow}>
+                <TouchableOpacity style={styles.timeStepBtn} onPress={() => setDraftStart(s => s - STEP_MS)} activeOpacity={0.75}>
+                  <Text style={styles.timeStepBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.timeDisplay}>{formatClockTime(draftStart)}</Text>
+                <TouchableOpacity style={styles.timeStepBtn} onPress={() => setDraftStart(s => s + STEP_MS)} activeOpacity={0.75}>
+                  <Text style={styles.timeStepBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.editFieldLabel, { marginTop: 10 }]}>End time</Text>
+              <View style={styles.timeRow}>
+                <TouchableOpacity style={styles.timeStepBtn} onPress={() => setDraftEnd(e => Math.max(e - STEP_MS, draftStart + STEP_MS))} activeOpacity={0.75}>
+                  <Text style={styles.timeStepBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.timeDisplay}>{formatClockTime(draftEnd)}</Text>
+                <TouchableOpacity style={styles.timeStepBtn} onPress={() => setDraftEnd(e => e + STEP_MS)} activeOpacity={0.75}>
+                  <Text style={styles.timeStepBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.editFieldLabel, { marginTop: 10 }]}>Event type</Text>
+              <View style={styles.typeChips}>
+                {EVENT_TYPES.map(type => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.typeChip, draftType === type && styles.typeChipActive]}
+                    onPress={() => setDraftType(type)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.typeChipText, draftType === type && styles.typeChipTextActive]}>
+                      {EVENT_TYPE_LABELS[type]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Footer actions */}
+          <View style={styles.detailActions}>
+            {editing ? (
+              <View style={styles.editActionRow}>
+                <TouchableOpacity style={styles.detailCancelBtn} onPress={cancelEdit} activeOpacity={0.82}>
+                  <Text style={styles.detailCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.detailSaveBtn} onPress={saveAndClose} activeOpacity={0.82}>
+                  <Text style={styles.detailSaveText}>Save changes</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.detailEditBtn}
+                  onPress={() => setEditing(true)}
+                  activeOpacity={0.82}
+                >
+                  <Text style={styles.detailEditText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.detailDeleteBtn}
+                  onPress={() => onDeleteEvent(event)}
+                  activeOpacity={0.82}
+                >
+                  <Text style={styles.detailDeleteText}>Delete event</Text>
+                </TouchableOpacity>
+                {linkedTodo ? (
+                  <TouchableOpacity
+                    style={styles.detailDeleteStrongBtn}
+                    onPress={() => onDeleteEventAndTodo(event)}
+                    activeOpacity={0.82}
+                  >
+                    <Text style={styles.detailDeleteStrongText}>Delete event and to-do</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </>
+            )}
           </View>
         </View>
       </View>
@@ -795,7 +940,7 @@ const styles = StyleSheet.create({
   hourLine: { borderTopWidth: 1, borderTopColor: COLORS.borderLight, height: '100%' },
   eventBlock: {
     position: 'absolute',
-    left: 6,
+    left: 62,
     right: 4,
     backgroundColor: '#c96544',
     borderRadius: 14,
@@ -1044,5 +1189,138 @@ const styles = StyleSheet.create({
     color: '#fff7f1',
     fontSize: FONTS.size.sm,
     fontWeight: '800',
+  },
+  detailTitleInput: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.brown,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 44,
+    textAlignVertical: 'top',
+  },
+  detailStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  detailStatusToggle: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.red,
+    fontWeight: '700',
+  },
+  detailEditFields: {
+    backgroundColor: COLORS.white50,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 14,
+    padding: 14,
+  },
+  editFieldLabel: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brownLight,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  timeStepBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.cream,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeStepBtnText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.brown,
+    lineHeight: 22,
+  },
+  timeDisplay: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: FONTS.size.lg,
+    fontWeight: '700',
+    color: COLORS.brown,
+  },
+  typeChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  typeChip: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: COLORS.cream,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  typeChipActive: {
+    backgroundColor: COLORS.brown,
+    borderColor: COLORS.brown,
+  },
+  typeChipText: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brown,
+    fontWeight: '600',
+  },
+  typeChipTextActive: {
+    color: COLORS.bg,
+  },
+  editActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  detailCancelBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    paddingVertical: 13,
+    alignItems: 'center',
+    backgroundColor: COLORS.white50,
+  },
+  detailCancelText: {
+    color: COLORS.brownLight,
+    fontSize: FONTS.size.sm,
+    fontWeight: '700',
+  },
+  detailSaveBtn: {
+    flex: 2,
+    borderRadius: 14,
+    paddingVertical: 13,
+    alignItems: 'center',
+    backgroundColor: COLORS.brown,
+  },
+  detailSaveText: {
+    color: COLORS.bg,
+    fontSize: FONTS.size.sm,
+    fontWeight: '800',
+  },
+  detailEditBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    paddingVertical: 13,
+    alignItems: 'center',
+    backgroundColor: COLORS.white50,
+  },
+  detailEditText: {
+    color: COLORS.brown,
+    fontSize: FONTS.size.sm,
+    fontWeight: '700',
   },
 });
