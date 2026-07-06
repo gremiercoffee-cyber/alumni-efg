@@ -40,6 +40,8 @@ interface Props {
   onDeleteCategory: (folderId: string) => void | Promise<void>;
   onRenameCategory: (folderId: string, title: string) => void;
   onChangeCategoryColor: (folderId: string, color: string) => void;
+  onAddList: (folderId: string, title: string) => void;
+  onAddCategory: (name: string) => void;
 }
 
 function collectFolderIds(node: FolderNode, ids = new Set<string>()): Set<string> {
@@ -452,6 +454,7 @@ function FolderSection({
   onDeleteList: (listId: string) => void | Promise<void>;
   onRenameCategory: (folderId: string, title: string) => void;
   onChangeCategoryColor: (folderId: string, color: string) => void;
+  onAddList: (folderId: string, title: string) => void;
 }) {
   const descendantIds = useMemo(() => Array.from(collectFolderIds(folder)), [folder]);
   const listsInFolder = todoLists.filter(list => list.folderId === folder.id);
@@ -467,11 +470,9 @@ function FolderSection({
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameDraft, setRenameDraft] = useState(folder.name);
+  const [addListOpen, setAddListOpen] = useState(false);
+  const [newListDraft, setNewListDraft] = useState('');
   const accentColor = folder.color || null;
-
-  if (listsInFolder.length === 0 && childFolders.length === 0) {
-    return null;
-  }
 
   return (
     <View
@@ -481,32 +482,41 @@ function FolderSection({
         accentColor ? { borderColor: accentColor, backgroundColor: tintColor(accentColor, '14') } : null,
       ]}
     >
-      <TouchableOpacity
-        style={styles.folderHeader}
-        onPress={() =>
-          onExpandedFoldersChange(current => ({
-            ...current,
-            [folder.id]: !(current[folder.id] ?? false),
-          }))
-        }
-        onLongPress={() => {
-          setRenameDraft(folder.name);
-          setActionsOpen(true);
-        }}
-        delayLongPress={240}
-        activeOpacity={0.85}
-      >
-        <View style={styles.folderHeaderTextWrap}>
-          <View style={styles.folderTitleRow}>
-            {accentColor ? <View style={[styles.folderColorDot, { backgroundColor: accentColor }]} /> : null}
-            <Text style={styles.folderTitle}>{folder.name}</Text>
+      <View style={styles.folderHeader}>
+        <TouchableOpacity
+          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 14 }}
+          onPress={() =>
+            onExpandedFoldersChange(current => ({
+              ...current,
+              [folder.id]: !(current[folder.id] ?? false),
+            }))
+          }
+          onLongPress={() => {
+            setRenameDraft(folder.name);
+            setActionsOpen(true);
+          }}
+          delayLongPress={240}
+          activeOpacity={0.85}
+        >
+          <View style={styles.folderHeaderTextWrap}>
+            <View style={styles.folderTitleRow}>
+              {accentColor ? <View style={[styles.folderColorDot, { backgroundColor: accentColor }]} /> : null}
+              <Text style={styles.folderTitle}>{folder.name}</Text>
+            </View>
+            <Text style={styles.folderMeta}>
+              {openCount} open{listsInFolder.length ? ` | ${listsInFolder.length} list${listsInFolder.length === 1 ? '' : 's'}` : ''}
+            </Text>
           </View>
-          <Text style={styles.folderMeta}>
-            {openCount} open{listsInFolder.length ? ` | ${listsInFolder.length} list${listsInFolder.length === 1 ? '' : 's'}` : ''}
-          </Text>
-        </View>
-        <Text style={styles.chevron}>{expanded ? '-' : '+'}</Text>
-      </TouchableOpacity>
+          <Text style={styles.chevron}>{expanded ? '−' : '+'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.folderAddBtn}
+          onPress={() => { setNewListDraft(''); setAddListOpen(true); }}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.folderAddBtnText}>+</Text>
+        </TouchableOpacity>
+      </View>
 
       {expanded ? (
         <View style={styles.folderBody}>
@@ -565,6 +575,7 @@ function FolderSection({
                 onDeleteList={onDeleteList}
                 onRenameCategory={onRenameCategory}
                 onChangeCategoryColor={onChangeCategoryColor}
+                onAddList={onAddList}
               />
             </View>
           ))}
@@ -642,6 +653,25 @@ function FolderSection({
           setRenameDraft(folder.name);
         }}
       />
+
+      <NamePromptModal
+        visible={addListOpen}
+        title={`New list in "${folder.name}"`}
+        placeholder="List name"
+        value={newListDraft}
+        onChangeText={setNewListDraft}
+        onConfirm={() => {
+          const trimmed = newListDraft.trim();
+          if (!trimmed) return;
+          onAddList(folder.id, trimmed);
+          setAddListOpen(false);
+          setNewListDraft('');
+        }}
+        onCancel={() => {
+          setAddListOpen(false);
+          setNewListDraft('');
+        }}
+      />
     </View>
   );
 }
@@ -664,14 +694,16 @@ export default function ToDosScreen({
   onDeleteCategory,
   onRenameCategory,
   onChangeCategoryColor,
+  onAddList,
+  onAddCategory,
 }: Props) {
+  const [addCategoryOpen, setAddCategoryOpen] = useState(false);
+  const [newCategoryDraft, setNewCategoryDraft] = useState('');
   const expandedFolders = expandState.folders;
   const expandedLists = expandState.lists;
   const expandedCompleted = expandState.completed;
   const rootLists = todoLists.filter(list => list.folderId === 'root');
-  const visibleFolders = tree.children.filter(folder =>
-    todoLists.some(list => collectFolderIds(folder).has(list.folderId))
-  );
+  const visibleFolders = tree.children;
   const openCount = countOpenItems(todoLists);
 
   const visibleFolderIds = useMemo(
@@ -747,13 +779,13 @@ export default function ToDosScreen({
           </TouchableOpacity>
         </View>
 
-        {todoLists.length === 0 ? (
+        {todoLists.length === 0 && visibleFolders.length === 0 ? (
           <Text style={styles.empty}>
             To-do lists will appear here when you speak a clear list of tasks into the Home mic.
           </Text>
-        ) : (
-          <>
-            {rootLists.length > 0 ? (
+        ) : null}
+        <>
+          {rootLists.length > 0 ? (
               <View style={styles.uncategorizedSection}>
                 <Text style={styles.uncategorizedTitle}>Uncategorized</Text>
                 {rootLists.map(list => (
@@ -813,11 +845,38 @@ export default function ToDosScreen({
                 onDeleteList={onDeleteList}
                 onRenameCategory={onRenameCategory}
                 onChangeCategoryColor={onChangeCategoryColor}
+                onAddList={onAddList}
               />
             ))}
-          </>
-        )}
+
+            <TouchableOpacity
+              style={styles.newCategoryBtn}
+              onPress={() => { setNewCategoryDraft(''); setAddCategoryOpen(true); }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.newCategoryBtnText}>New category</Text>
+            </TouchableOpacity>
+        </>
       </ScrollView>
+
+      <NamePromptModal
+        visible={addCategoryOpen}
+        title="New category"
+        placeholder="Category name"
+        value={newCategoryDraft}
+        onChangeText={setNewCategoryDraft}
+        onConfirm={() => {
+          const trimmed = newCategoryDraft.trim();
+          if (!trimmed) return;
+          onAddCategory(trimmed);
+          setAddCategoryOpen(false);
+          setNewCategoryDraft('');
+        }}
+        onCancel={() => {
+          setAddCategoryOpen(false);
+          setNewCategoryDraft('');
+        }}
+      />
     </View>
   );
 }
@@ -892,10 +951,22 @@ const styles = StyleSheet.create({
   folderHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
     backgroundColor: 'rgba(123, 93, 72, 0.1)',
+  },
+  folderAddBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.brown,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  folderAddBtnText: {
+    color: COLORS.bg,
+    fontSize: 20,
+    lineHeight: 22,
+    marginTop: -1,
   },
   folderHeaderTextWrap: {
     flex: 1,
@@ -1118,5 +1189,23 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.xs,
     color: COLORS.brownFaint,
     marginTop: 4,
+  },
+  newCategoryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    backgroundColor: COLORS.white50,
+  },
+  newCategoryBtnText: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.brownLight,
+    fontWeight: '600',
   },
 });

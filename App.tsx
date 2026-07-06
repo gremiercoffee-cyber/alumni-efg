@@ -990,6 +990,19 @@ export default function App() {
     }
   };
 
+  const addTodoList = (folderId: string, title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    const list: TodoList = { id: makeId('list'), title: trimmed, folderId, items: [], ts: Date.now() };
+    setTodoLists(lists => [...lists, list]);
+  };
+
+  const addTodoCategory = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setTodoTree(current => addChildFolder(current, 'root', trimmed).tree);
+  };
+
   const addManualTodoItem = (listId: string, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -1194,6 +1207,8 @@ export default function App() {
         onDeleteCategory={deleteTodoCategory}
         onRenameCategory={renameTodoCategory}
         onChangeCategoryColor={changeTodoCategoryColor}
+        onAddList={addTodoList}
+        onAddCategory={addTodoCategory}
       />
     );
   } else if (tab === 'settings') {

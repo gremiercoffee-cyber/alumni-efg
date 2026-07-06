@@ -279,31 +279,36 @@ export default function KeeperScreen({
         </View>
       ) : null}
 
-      <Modal visible={modalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Keep something</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Type anything you want to keep..."
-              placeholderTextColor={COLORS.brownFaint}
-              value={draft}
-              onChangeText={setDraft}
-              multiline
-              autoFocus
-            />
-            <View style={styles.modalButtons}>
+      <Modal visible={modalVisible} transparent animationType="slide" statusBarTranslucent={true}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ height: '88%', backgroundColor: COLORS.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }}>
+            <View style={{ padding: 20, borderBottomWidth: 1, borderBottomColor: COLORS.border }}>
+              <Text style={{ fontSize: 11, letterSpacing: 2, color: COLORS.brownLight, textAlign: 'center' }}>KEEPER</Text>
+              <Text style={{ fontSize: 22, fontWeight: '700', color: COLORS.brown, textAlign: 'center', marginTop: 4 }}>Keep something</Text>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Type anything you want to keep..."
+                placeholderTextColor={COLORS.brownFaint}
+                value={draft}
+                onChangeText={setDraft}
+                multiline
+                autoFocus
+              />
+            </ScrollView>
+            <View style={{ flexDirection: 'row', padding: 16, paddingBottom: 32, gap: 12, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.bg }}>
               <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => {
-                  setDraft('');
-                  setModalVisible(false);
-                }}
+                onPress={() => { setDraft(''); setModalVisible(false); }}
+                style={{ flex: 1, paddingVertical: 16, borderRadius: 30, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' }}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={{ color: COLORS.brownLight }}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalCreate} onPress={submitText}>
-                <Text style={styles.modalCreateText}>Save</Text>
+              <TouchableOpacity
+                onPress={submitText}
+                style={{ flex: 2, paddingVertical: 16, borderRadius: 30, backgroundColor: COLORS.brown, alignItems: 'center' }}
+              >
+                <Text style={{ color: COLORS.bg, fontWeight: '600' }}>Save to Keeper</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -658,24 +663,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 8,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalBox: {
-    width: '84%',
-    backgroundColor: COLORS.bg,
-    borderRadius: 14,
-    padding: 20,
-  },
-  modalTitle: {
-    fontSize: FONTS.size.lg,
-    fontWeight: '600',
-    color: COLORS.brown,
-    marginBottom: 12,
-  },
   modalInput: {
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -685,20 +672,5 @@ const styles = StyleSheet.create({
     color: COLORS.brown,
     minHeight: 120,
     textAlignVertical: 'top',
-    marginBottom: 16,
   },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-  },
-  modalCancel: { paddingVertical: 8, paddingHorizontal: 12 },
-  modalCancelText: { fontSize: FONTS.size.md, color: COLORS.brownFaint },
-  modalCreate: {
-    backgroundColor: COLORS.brown,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-  },
-  modalCreateText: { fontSize: FONTS.size.md, color: COLORS.bg, fontWeight: '600' },
 });
