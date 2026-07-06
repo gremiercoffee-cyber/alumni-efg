@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     elevation: 1000,
   },
   container: {
-    maxHeight: '92%',
+    height: '82%',
     backgroundColor: COLORS.bg,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,

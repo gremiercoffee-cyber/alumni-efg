@@ -28,6 +28,7 @@ export interface CalendarEvent {
   startAt: number;
   endAt: number;
   allDay: boolean;
+  done: boolean;
   categoryFolderId: string | null;
   todoListId: string | null;
   todoItemId: string | null;

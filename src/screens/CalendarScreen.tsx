@@ -34,6 +34,7 @@ interface Props {
   todoTree: FolderNode;
   events: CalendarEvent[];
   onOpenEvent: (event: CalendarEvent) => void;
+  onToggleEventDone: (eventId: string) => void | Promise<void>;
   onRescheduleEvent: (eventId: string, startAt: number, endAt: number, allDay: boolean) => void;
 }
 
@@ -42,7 +43,7 @@ const HOUR_HEIGHT = 60;
 const SNAP_MINUTES = 15;
 const DEFAULT_SCROLL_HOUR = 7;
 
-export default function CalendarScreen({ todoTree, events, onOpenEvent, onRescheduleEvent }: Props) {
+export default function CalendarScreen({ todoTree, events, onOpenEvent, onToggleEventDone, onRescheduleEvent }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
 
@@ -113,6 +114,7 @@ export default function CalendarScreen({ todoTree, events, onOpenEvent, onResche
           day={selectedDate}
           events={dayEvents}
           onOpenEvent={onOpenEvent}
+          onToggleEventDone={onToggleEventDone}
           onRescheduleEvent={onRescheduleEvent}
         />
       ) : null}
@@ -152,9 +154,24 @@ export default function CalendarScreen({ todoTree, events, onOpenEvent, onResche
                             const accent = getFolderColor(todoTree, event.categoryFolderId);
                             return accent ? { backgroundColor: tintColor(accent, '33'), borderColor: tintColor(accent, '88') } : null;
                           })(),
+                          event.done && styles.weekEventDone,
                         ]}
                       >
-                        <Text style={styles.weekEventTitle} numberOfLines={2}>{event.title}</Text>
+                        <View style={styles.weekEventTitleRow}>
+                          <TouchableOpacity
+                            style={[styles.eventCheckbox, event.done && styles.eventCheckboxDone]}
+                            onPress={pressEvent => {
+                              pressEvent.stopPropagation();
+                              onToggleEventDone(event.id);
+                            }}
+                            activeOpacity={0.75}
+                          >
+                            {event.done ? <Text style={styles.eventCheckmark}>x</Text> : null}
+                          </TouchableOpacity>
+                          <Text style={[styles.weekEventTitle, event.done && styles.eventTitleDone]} numberOfLines={2}>
+                            {event.title}
+                          </Text>
+                        </View>
                         <Text style={styles.weekEventBadge}>{EVENT_TYPE_LABELS[event.eventType]}</Text>
                         <Text style={styles.weekEventTime}>
                           {event.allDay ? 'All day' : `${formatClockTime(event.startAt)} - ${formatClockTime(event.endAt)}`}
@@ -178,7 +195,9 @@ export default function CalendarScreen({ todoTree, events, onOpenEvent, onResche
           </View>
           <View style={styles.monthGrid}>
             {monthDays.map(day => {
-              const dayEventsCount = events.filter(event => eventOccursOnDay(event, day)).length;
+              const dayItems = events.filter(event => eventOccursOnDay(event, day));
+              const dayEventsCount = dayItems.length;
+              const allDone = dayEventsCount > 0 && dayItems.every(event => event.done);
               const inMonth = day.getMonth() === selectedDate.getMonth();
               return (
                 <TouchableOpacity
@@ -198,7 +217,8 @@ export default function CalendarScreen({ todoTree, events, onOpenEvent, onResche
                       style={[
                         styles.monthIndicator,
                         (() => {
-                          const accent = getFolderColor(todoTree, events.find(event => eventOccursOnDay(event, day))?.categoryFolderId || null);
+                          if (allDone) return { backgroundColor: COLORS.brownFaint };
+                          const accent = getFolderColor(todoTree, dayItems[0]?.categoryFolderId || null);
                           return accent ? { backgroundColor: accent } : null;
                         })(),
                       ]}
@@ -223,12 +243,14 @@ function DayView({
   day,
   events,
   onOpenEvent,
+  onToggleEventDone,
   onRescheduleEvent,
 }: {
   todoTree: FolderNode;
   day: Date;
   events: CalendarEvent[];
   onOpenEvent: (event: CalendarEvent) => void;
+  onToggleEventDone: (eventId: string) => void | Promise<void>;
   onRescheduleEvent: (eventId: string, startAt: number, endAt: number, allDay: boolean) => void;
 }) {
   const scrollRef = useRef<any>(null);
@@ -340,11 +362,23 @@ function DayView({
             {events.filter(event => event.allDay).map(event => (
               <TouchableOpacity
                 key={event.id}
-                style={styles.allDayChip}
+                style={[styles.allDayChip, event.done && styles.allDayChipDone]}
                 onPress={() => onOpenEvent(event)}
                 activeOpacity={0.82}
               >
-                <Text style={styles.allDayChipText} numberOfLines={1}>{event.title}</Text>
+                <TouchableOpacity
+                  style={[styles.eventCheckbox, event.done && styles.eventCheckboxDone]}
+                  onPress={pressEvent => {
+                    pressEvent.stopPropagation();
+                    onToggleEventDone(event.id);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  {event.done ? <Text style={styles.eventCheckmark}>x</Text> : null}
+                </TouchableOpacity>
+                <Text style={[styles.allDayChipText, event.done && styles.eventTitleDone]} numberOfLines={1}>
+                  {event.title}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -368,13 +402,26 @@ function DayView({
           const eventDuration = event.endAt - event.startAt;
           const effectiveStartAt = previewStartTimes[event.id] ?? event.startAt;
           const effectiveEndAt = effectiveStartAt + eventDuration;
-          const top = topForTimestamp(effectiveStartAt);
+          const top = topForTimestamp(event.startAt);
           const height = Math.max((eventDuration / (60 * 60 * 1000)) * HOUR_HEIGHT, HOUR_HEIGHT / 2);
           const isDragging = draggingEventId === event.id;
 
           return (
+            <React.Fragment key={event.id}>
+              {isDragging ? (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.eventBlock,
+                    styles.eventGhost,
+                    {
+                      top,
+                      height,
+                    },
+                  ]}
+                />
+              ) : null}
             <Animated.View
-              key={event.id}
               style={[
                 styles.eventBlock,
                 (() => {
@@ -386,10 +433,11 @@ function DayView({
                       }
                     : null;
                 })(),
+                event.done && styles.eventBlockDone,
                 {
                   top,
                   height,
-                  opacity: isDragging ? 0.88 : 1,
+                  opacity: isDragging ? 0.94 : 1,
                   transform: isDragging ? [{ translateY: dragOffsetY }] : undefined,
                   zIndex: isDragging ? 5 : 1,
                   elevation: isDragging ? 6 : 2,
@@ -399,8 +447,8 @@ function DayView({
               <View style={styles.eventHandleWrap}>
                 <PanGestureHandler
                   minDist={2}
+                  activateAfterLongPress={200}
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  simultaneousHandlers={scrollRef}
                   onGestureEvent={({ nativeEvent }) => {
                     if (dragRef.current.eventId !== event.id) return;
                     applyPreview(event.id, event.startAt, nativeEvent.translationY);
@@ -454,13 +502,28 @@ function DayView({
                 onPress={() => onOpenEvent(event)}
                 activeOpacity={0.82}
               >
-                <Text style={styles.eventBlockTitle} numberOfLines={2}>{event.title}</Text>
+                <View style={styles.eventTitleRow}>
+                  <TouchableOpacity
+                    style={[styles.eventCheckbox, styles.eventCheckboxLight, event.done && styles.eventCheckboxDone]}
+                    onPress={pressEvent => {
+                      pressEvent.stopPropagation();
+                      onToggleEventDone(event.id);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    {event.done ? <Text style={styles.eventCheckmark}>x</Text> : null}
+                  </TouchableOpacity>
+                  <Text style={[styles.eventBlockTitle, event.done && styles.eventBlockTitleDone]} numberOfLines={2}>
+                    {event.title}
+                  </Text>
+                </View>
                 <Text style={styles.eventTypeBadge}>{EVENT_TYPE_LABELS[event.eventType]}</Text>
                 <Text style={styles.eventBlockTime}>
                   {formatClockTime(effectiveStartAt)} - {formatClockTime(effectiveEndAt)}
                 </Text>
               </TouchableOpacity>
             </Animated.View>
+            </React.Fragment>
           );
         })}
       </View>
@@ -523,11 +586,15 @@ const styles = StyleSheet.create({
   },
   allDayItems: { gap: 8 },
   allDayChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: COLORS.cream,
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
+  allDayChipDone: { opacity: 0.58 },
   allDayChipText: { color: COLORS.brown, fontSize: FONTS.size.sm, fontWeight: '600' },
   timeline: { position: 'relative', paddingLeft: 58, height: HOUR_HEIGHT * 24 },
   hourRow: { height: HOUR_HEIGHT, position: 'relative' },
@@ -555,6 +622,15 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
+  eventGhost: {
+    backgroundColor: 'rgba(138, 125, 99, 0.16)',
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    elevation: 0,
+    shadowOpacity: 0,
+    zIndex: 0,
+  },
+  eventBlockDone: { opacity: 0.58 },
   eventHandleWrap: {
     position: 'absolute',
     left: 0,
@@ -577,7 +653,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   eventTouch: { flex: 1, padding: 12, paddingLeft: 38 },
-  eventBlockTitle: { color: '#fff8f1', fontWeight: '700', fontSize: FONTS.size.sm },
+  eventTitleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  eventBlockTitle: { color: '#fff8f1', fontWeight: '700', fontSize: FONTS.size.sm, flex: 1 },
+  eventBlockTitleDone: { textDecorationLine: 'line-through' },
+  eventCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: COLORS.brownLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  eventCheckboxLight: {
+    borderColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  eventCheckboxDone: {
+    backgroundColor: COLORS.brown,
+    borderColor: COLORS.brown,
+  },
+  eventCheckmark: { color: '#fff', fontSize: 11, fontWeight: '800', lineHeight: 13 },
   eventTypeBadge: {
     alignSelf: 'flex-start',
     marginTop: 6,
@@ -616,7 +713,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  weekEventTitle: { color: COLORS.brown, fontSize: FONTS.size.sm, fontWeight: '600' },
+  weekEventDone: { opacity: 0.58 },
+  weekEventTitleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  weekEventTitle: { color: COLORS.brown, fontSize: FONTS.size.sm, fontWeight: '600', flex: 1 },
+  eventTitleDone: { textDecorationLine: 'line-through' },
   weekEventBadge: {
     color: COLORS.brown,
     fontSize: 10,

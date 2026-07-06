@@ -434,6 +434,7 @@ export default function App() {
         startAt: item.reminderAt,
         endAt: item.reminderAt + durationMs,
         allDay: false,
+        done: item.done,
         categoryFolderId: folderId,
         todoListId: listId,
         todoItemId: item.id,
@@ -470,7 +471,10 @@ export default function App() {
       if (notificationId) {
         await cancelTodoReminder(notificationId);
       }
-      notificationId = await scheduleTodoReminder('To-do reminder', text, newTime, listId, folderId);
+      const itemDone = !!todoLists.find(list => list.id === listId)?.items.find(item => item.id === itemId)?.done;
+      notificationId = itemDone || newTime <= Date.now()
+        ? null
+        : await scheduleTodoReminder('To-do reminder', text, newTime, listId, folderId);
       const due = formatReminderLabel(newTime);
       setTodoLists(lists =>
         lists.map(list =>
@@ -521,6 +525,7 @@ export default function App() {
           startAt: parsed.startAt,
           endAt: parsed.endAt,
           allDay: parsed.allDay,
+          done: false,
           categoryFolderId: sourceFolderId,
           todoListId: listId,
           todoItemId: item.todoItemId || null,
@@ -554,6 +559,7 @@ export default function App() {
                 startAt: parsed.startAt,
                 endAt: parsed.endAt,
                 allDay: parsed.allDay,
+                done: false,
                 categoryFolderId: null,
                 todoListId: null,
                 todoItemId: null,
@@ -673,14 +679,72 @@ export default function App() {
 
   const discardPending = () => setPending(null);
 
-  const toggleTodoItem = (listId: string, itemId: string) => {
+  const toggleTodoItem = async (listId: string, itemId: string) => {
+    const list = todoLists.find(entry => entry.id === listId);
+    const currentItem = list?.items.find(item => item.id === itemId);
+    if (!list || !currentItem) return;
+    const nextDone = !currentItem.done;
+    let nextNotificationId = currentItem.notificationId;
+
+    if (nextDone && nextNotificationId) {
+      await cancelTodoReminder(nextNotificationId);
+      nextNotificationId = null;
+    } else if (!nextDone && currentItem.reminderAt && currentItem.reminderAt > Date.now()) {
+      nextNotificationId = await scheduleTodoReminder('To-do reminder', currentItem.text, currentItem.reminderAt, listId, list.folderId);
+    }
+
     setTodoLists(lists =>
       lists.map(list =>
         list.id === listId
-          ? { ...list, items: list.items.map(item => (item.id === itemId ? { ...item, done: !item.done } : item)) }
+          ? {
+              ...list,
+              items: list.items.map(item =>
+                item.id === itemId ? { ...item, done: nextDone, notificationId: nextNotificationId } : item
+              ),
+            }
           : list
       )
     );
+    if (currentItem.eventId) {
+      setCalendarEvents(events => events.map(event => event.id === currentItem.eventId ? { ...event, done: nextDone } : event));
+    }
+  };
+
+  const toggleCalendarEventDone = async (eventId: string) => {
+    const event = calendarEvents.find(entry => entry.id === eventId);
+    if (!event) return;
+    const nextDone = !event.done;
+    let nextNotificationId: string | null | undefined;
+
+    if (event.todoListId && event.todoItemId) {
+      const list = todoLists.find(entry => entry.id === event.todoListId);
+      const item = list?.items.find(entry => entry.id === event.todoItemId);
+      if (item) {
+        nextNotificationId = item.notificationId;
+        if (nextDone && nextNotificationId) {
+          await cancelTodoReminder(nextNotificationId);
+          nextNotificationId = null;
+        } else if (!nextDone && item.reminderAt && item.reminderAt > Date.now()) {
+          nextNotificationId = await scheduleTodoReminder('To-do reminder', item.text, item.reminderAt, list.id, list.folderId);
+        }
+        setTodoLists(lists =>
+          lists.map(entry =>
+            entry.id === list.id
+              ? {
+                  ...entry,
+                  items: entry.items.map(todo =>
+                    todo.id === item.id
+                      ? { ...todo, done: nextDone, notificationId: nextNotificationId ?? null }
+                      : todo
+                  ),
+                }
+              : entry
+          )
+        );
+      }
+    }
+
+    setCalendarEvents(events => events.map(entry => entry.id === eventId ? { ...entry, done: nextDone } : entry));
   };
 
   const renameTodoList = (listId: string, title: string) => {
@@ -700,7 +764,7 @@ export default function App() {
     const item = list?.items.find(entry => entry.id === itemId);
     if (!list || !item) return;
     let notificationId = item.notificationId;
-    if (item.reminderAt) {
+    if (item.reminderAt && !item.done) {
       if (notificationId) await cancelTodoReminder(notificationId);
       notificationId = await scheduleTodoReminder('To-do reminder', text, item.reminderAt, listId, list.folderId);
     }
@@ -822,7 +886,7 @@ export default function App() {
       notificationId = null;
     }
 
-    if (reminderAt) {
+    if (reminderAt && !item.done) {
       const granted = await requestReminderPermissions();
       setSettings(prev => ({ ...prev, notificationsPermissionAsked: true }));
       if (!granted) {
@@ -1015,6 +1079,7 @@ export default function App() {
             ]
           );
         }}
+        onToggleEventDone={toggleCalendarEventDone}
         onRescheduleEvent={(eventId, startAt, endAt, allDay) => {
           console.log('[CalendarDrag] updateScheduledItem input', {
             eventId,
@@ -1058,70 +1123,67 @@ export default function App() {
               <MaterialCommunityIcons name="microphone" size={26} color="#fff7f1" />
             </TouchableOpacity>
           ) : null}
-          {pending
-            ? (console.log('Review pending payload', pending),
-              (
-                <ReviewScreen
-                  visible
-                  pending={pending}
-                  tree={reviewTree}
-                  todoLists={todoLists}
-                  onApprove={approvePending}
-                  onDiscard={discardPending}
-                />
-              ))
-            : null}
-          {currentReminder ? (
-            <TodoReminderModal
-              visible
-              itemText={currentReminder.text}
-              initialTimestamp={currentReminderTimestamp}
-              suggestedLabel={currentReminder.suggestedDue}
-              onSkip={() => updateTodoReminder(currentReminder, null)}
-              onSave={timestamp => updateTodoReminder(currentReminder, timestamp)}
-            />
-          ) : null}
-          <Modal
-            visible={recordModeSheetOpen}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setRecordModeSheetOpen(false)}
-          >
-            <View style={styles.sheetScrim}>
-              <TouchableOpacity
-                style={styles.sheetDismissArea}
-                activeOpacity={1}
-                onPress={() => setRecordModeSheetOpen(false)}
-              />
-              <View style={styles.sheet}>
-                <Text style={styles.sheetTitle}>Choose a recording type</Text>
-                <TouchableOpacity
-                  style={styles.sheetOption}
-                  onPress={() => {
-                    setRecordModeSheetOpen(false);
-                    startQuickCapture();
-                  }}
-                  activeOpacity={0.86}
-                >
-                  <Text style={styles.sheetOptionTitle}>Quick note / To-do</Text>
-                  <Text style={styles.sheetOptionText}>
-                    Short capture for a note, checklist, or quick thought.
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.sheetOption}
-                  onPress={startMeetingCapture}
-                  activeOpacity={0.86}
-                >
-                  <Text style={styles.sheetOptionTitle}>Record a meeting</Text>
-                  <Text style={styles.sheetOptionText}>
-                    Longer recording with transcript, summary, and action items. It keeps recording if you switch apps.
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Modal>
         </View>
+        {pending ? (
+          <ReviewScreen
+            visible
+            pending={pending}
+            tree={reviewTree}
+            todoLists={todoLists}
+            onApprove={approvePending}
+            onDiscard={discardPending}
+          />
+        ) : null}
+        {currentReminder ? (
+          <TodoReminderModal
+            visible
+            itemText={currentReminder.text}
+            initialTimestamp={currentReminderTimestamp}
+            suggestedLabel={currentReminder.suggestedDue}
+            onSkip={() => updateTodoReminder(currentReminder, null)}
+            onSave={timestamp => updateTodoReminder(currentReminder, timestamp)}
+          />
+        ) : null}
+        <Modal
+          visible={recordModeSheetOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setRecordModeSheetOpen(false)}
+        >
+          <View style={styles.sheetScrim}>
+            <TouchableOpacity
+              style={styles.sheetDismissArea}
+              activeOpacity={1}
+              onPress={() => setRecordModeSheetOpen(false)}
+            />
+            <View style={styles.sheet}>
+              <Text style={styles.sheetTitle}>Choose a recording type</Text>
+              <TouchableOpacity
+                style={styles.sheetOption}
+                onPress={() => {
+                  setRecordModeSheetOpen(false);
+                  startQuickCapture();
+                }}
+                activeOpacity={0.86}
+              >
+                <Text style={styles.sheetOptionTitle}>Quick note / To-do</Text>
+                <Text style={styles.sheetOptionText}>
+                  Short capture for a note, checklist, or quick thought.
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.sheetOption}
+                onPress={startMeetingCapture}
+                activeOpacity={0.86}
+              >
+                <Text style={styles.sheetOptionTitle}>Record a meeting</Text>
+                <Text style={styles.sheetOptionText}>
+                  Longer recording with transcript, summary, and action items. It keeps recording if you switch apps.
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </GestureHandlerRootView>
   );

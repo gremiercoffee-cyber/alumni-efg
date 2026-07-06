@@ -74,6 +74,7 @@ export async function loadAppState(): Promise<AppState | null> {
       })),
       calendarEvents: (state.calendarEvents || []).map(event => ({
         ...event,
+        done: event.done ?? false,
         eventType: event.eventType ?? (event.kind === 'action_item' ? 'task' : 'other'),
         sourceNote: event.sourceNote ?? null,
       })),
