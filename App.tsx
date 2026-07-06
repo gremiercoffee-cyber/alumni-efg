@@ -5,6 +5,7 @@ import {
   Modal,
   Platform,
   SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -16,7 +17,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Audio } from 'expo-av';
 import RecordingScreen from './src/screens/RecordingScreen';
 import ProcessingScreen from './src/screens/ProcessingScreen';
-import ReviewScreen from './src/screens/ReviewScreen';
 import FoldersScreen from './src/screens/FoldersScreen';
 import FolderDetailScreen from './src/screens/FolderDetailScreen';
 import KeeperScreen from './src/screens/KeeperScreen';
@@ -46,6 +46,7 @@ import {
   flattenFolders,
   formatClockTime,
   formatReminderLabel,
+  folderPathLabel,
   makeId,
   parseNaturalDateTime,
   parseSuggestedReminder,
@@ -97,6 +98,105 @@ function todoTargetFromUrl(url: string): { listId: string | null; folderId: stri
     listId: listId ? decodeURIComponent(listId) : null,
     folderId: folderId ? decodeURIComponent(folderId) : null,
   };
+}
+
+function ReviewContent({
+  pending,
+  tree,
+  todoLists,
+}: {
+  pending: PendingCapture | null;
+  tree: FolderNode;
+  todoLists: TodoList[];
+}) {
+  if (!pending) {
+    return <Text style={styles.reviewEmptyText}>Nothing was extracted - try recording again.</Text>;
+  }
+
+  const allFolders = flattenFolders(tree);
+  const folderLabel = pending.existingFolderId
+    ? folderPathLabel(pending.existingFolderId, allFolders)
+    : pending.newFolderSuggestion
+    ? `New: ${folderPathLabel(pending.newFolderSuggestion.parentId, allFolders)} / ${pending.newFolderSuggestion.name}`
+    : 'Everything';
+
+  if (pending.contentType === 'todo_items') {
+    const todoListLabel = pending.existingTodoListId
+      ? todoLists.find(list => list.id === pending.existingTodoListId)?.title || 'Existing list'
+      : pending.newTodoListTitle || pending.title || 'New to-do list';
+
+    return (
+      <View style={styles.reviewBody}>
+        <View style={styles.reviewSummaryCard}>
+          <Text style={styles.reviewTitle}>{pending.title || 'New to-dos'}</Text>
+          <Text style={styles.reviewMeta}>Category: {folderLabel}</Text>
+          <Text style={styles.reviewMeta}>Target list: {todoListLabel}</Text>
+        </View>
+        {pending.todoItems.length ? (
+          pending.todoItems.map((item, index) => (
+            <View key={`${item.text}-${index}`} style={styles.reviewRow}>
+              <Text style={styles.reviewBullet}>-</Text>
+              <View style={styles.reviewRowText}>
+                <Text style={styles.reviewItemTitle}>{item.text || 'Untitled task'}</Text>
+                <Text style={styles.reviewMeta}>List: {todoListLabel}</Text>
+                <Text style={styles.reviewMeta}>Reminder: {item.due || 'None inferred'}</Text>
+              </View>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.reviewEmptyText}>Nothing was extracted - try recording again.</Text>
+        )}
+      </View>
+    );
+  }
+
+  if (pending.contentType === 'calendar_entries') {
+    return (
+      <View style={styles.reviewBody}>
+        <View style={styles.reviewSummaryCard}>
+          <Text style={styles.reviewTitle}>{pending.title || 'New events'}</Text>
+          <Text style={styles.reviewMeta}>{pending.summary || 'Review each extracted event before saving.'}</Text>
+        </View>
+        {pending.calendarEntries.length ? (
+          pending.calendarEntries.map((entry, index) => (
+            <View key={`${entry.title}-${index}`} style={styles.reviewRow}>
+              <Text style={styles.reviewBullet}>-</Text>
+              <View style={styles.reviewRowText}>
+                <Text style={styles.reviewItemTitle}>{entry.title || 'Untitled event'}</Text>
+                <Text style={styles.reviewMeta}>Date: {entry.date || 'Today'}</Text>
+                <Text style={styles.reviewMeta}>Time: {entry.time || 'All day'}</Text>
+              </View>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.reviewEmptyText}>Nothing was extracted - try recording again.</Text>
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.reviewBody}>
+      <View style={styles.reviewSummaryCard}>
+        <Text style={styles.reviewTitle}>{pending.title || 'New note'}</Text>
+        <Text style={styles.reviewMeta}>Folder: {folderLabel}</Text>
+        <Text style={styles.reviewParagraph}>{pending.summary || 'No summary extracted.'}</Text>
+      </View>
+      {pending.actionItems.length ? (
+        pending.actionItems.map((item, index) => (
+          <View key={`${item.text}-${index}`} style={styles.reviewRow}>
+            <Text style={styles.reviewBullet}>-</Text>
+            <View style={styles.reviewRowText}>
+              <Text style={styles.reviewItemTitle}>{item.text || 'Untitled action item'}</Text>
+              <Text style={styles.reviewMeta}>Due: {item.due || 'No due date inferred'}</Text>
+            </View>
+          </View>
+        ))
+      ) : (
+        <Text style={styles.reviewEmptyText}>Nothing was extracted - try recording again.</Text>
+      )}
+    </View>
+  );
 }
 
 export default function App() {
@@ -450,32 +550,43 @@ export default function App() {
 
   const updateScheduledItem = async (
     eventId: string,
-    newTime: number,
-    options?: { durationMs?: number; title?: string; eventType?: CalendarEvent['eventType'] }
+    newTime: number | null,
+    options?: { durationMs?: number; title?: string; eventType?: CalendarEvent['eventType']; done?: boolean }
   ) => {
-    let linkedTodo: { listId: string; folderId: string; itemId: string; text: string } | null = null;
-    todoLists.some(list => {
-      const item = list.items.find(entry => entry.eventId === eventId);
-      if (!item) return false;
-      linkedTodo = { listId: list.id, folderId: list.folderId, itemId: item.id, text: item.text };
-      return true;
-    });
+    const currentEvent = calendarEvents.find(event => event.id === eventId);
+    let linkedTodo: { listId: string; folderId: string; itemId: string; text: string; done: boolean } | null = null;
+    if (currentEvent?.todoListId && currentEvent.todoItemId) {
+      const list = todoLists.find(entry => entry.id === currentEvent.todoListId);
+      const item = list?.items.find(entry => entry.id === currentEvent.todoItemId);
+      if (list && item) {
+        linkedTodo = { listId: list.id, folderId: list.folderId, itemId: item.id, text: item.text, done: item.done };
+      }
+    }
+    if (!linkedTodo) {
+      todoLists.some(list => {
+        const item = list.items.find(entry => entry.eventId === eventId);
+        if (!item) return false;
+        linkedTodo = { listId: list.id, folderId: list.folderId, itemId: item.id, text: item.text, done: item.done };
+        return true;
+      });
+    }
 
     if (linkedTodo) {
       const listId = linkedTodo.listId;
       const folderId = linkedTodo.folderId;
       const itemId = linkedTodo.itemId;
       const text = options?.title || linkedTodo.text;
+      const nextTime = newTime ?? currentEvent?.startAt ?? null;
+      const nextDone = options?.done ?? linkedTodo.done;
       let notificationId =
         todoLists.find(list => list.id === listId)?.items.find(item => item.id === itemId)?.notificationId || null;
       if (notificationId) {
         await cancelTodoReminder(notificationId);
       }
-      const itemDone = !!todoLists.find(list => list.id === listId)?.items.find(item => item.id === itemId)?.done;
-      notificationId = itemDone || newTime <= Date.now()
+      notificationId = !nextTime || nextDone || nextTime <= Date.now()
         ? null
-        : await scheduleTodoReminder('To-do reminder', text, newTime, listId, folderId);
-      const due = formatReminderLabel(newTime);
+        : await scheduleTodoReminder('To-do reminder', text, nextTime, listId, folderId);
+      const due = nextTime ? formatReminderLabel(nextTime) : null;
       setTodoLists(lists =>
         lists.map(list =>
           list.id === listId
@@ -483,7 +594,7 @@ export default function App() {
                 ...list,
                 items: list.items.map(item =>
                   item.id === itemId
-                    ? { ...item, text, reminderAt: newTime, due, notificationId, eventId }
+                    ? { ...item, text, reminderAt: nextTime, due, notificationId, eventId, done: nextDone }
                     : item
                 ),
               }
@@ -498,9 +609,10 @@ export default function App() {
           ? {
               ...event,
               title: options?.title || event.title,
-              startAt: newTime,
-              endAt: newTime + (options?.durationMs || (event.endAt - event.startAt)),
-              allDay: false,
+              startAt: newTime ?? event.startAt,
+              endAt: (newTime ?? event.startAt) + (options?.durationMs || (event.endAt - event.startAt)),
+              allDay: newTime === null ? event.allDay : false,
+              done: options?.done ?? event.done,
               eventType: options?.eventType || event.eventType,
             }
           : event
@@ -684,15 +796,18 @@ export default function App() {
     const currentItem = list?.items.find(item => item.id === itemId);
     if (!list || !currentItem) return;
     const nextDone = !currentItem.done;
-    let nextNotificationId = currentItem.notificationId;
+    if (currentItem.eventId) {
+      await updateScheduledItem(currentItem.eventId, currentItem.reminderAt, { done: nextDone });
+      return;
+    }
 
+    let nextNotificationId = currentItem.notificationId;
     if (nextDone && nextNotificationId) {
       await cancelTodoReminder(nextNotificationId);
       nextNotificationId = null;
     } else if (!nextDone && currentItem.reminderAt && currentItem.reminderAt > Date.now()) {
       nextNotificationId = await scheduleTodoReminder('To-do reminder', currentItem.text, currentItem.reminderAt, listId, list.folderId);
     }
-
     setTodoLists(lists =>
       lists.map(list =>
         list.id === listId
@@ -705,46 +820,62 @@ export default function App() {
           : list
       )
     );
-    if (currentItem.eventId) {
-      setCalendarEvents(events => events.map(event => event.id === currentItem.eventId ? { ...event, done: nextDone } : event));
-    }
   };
 
   const toggleCalendarEventDone = async (eventId: string) => {
     const event = calendarEvents.find(entry => entry.id === eventId);
     if (!event) return;
-    const nextDone = !event.done;
-    let nextNotificationId: string | null | undefined;
+    await updateScheduledItem(eventId, event.startAt, { done: !event.done });
+  };
 
-    if (event.todoListId && event.todoItemId) {
+  const findTodoForEvent = (eventId: string) => {
+    const event = calendarEvents.find(entry => entry.id === eventId);
+    if (event?.todoListId && event.todoItemId) {
       const list = todoLists.find(entry => entry.id === event.todoListId);
       const item = list?.items.find(entry => entry.id === event.todoItemId);
-      if (item) {
-        nextNotificationId = item.notificationId;
-        if (nextDone && nextNotificationId) {
-          await cancelTodoReminder(nextNotificationId);
-          nextNotificationId = null;
-        } else if (!nextDone && item.reminderAt && item.reminderAt > Date.now()) {
-          nextNotificationId = await scheduleTodoReminder('To-do reminder', item.text, item.reminderAt, list.id, list.folderId);
-        }
-        setTodoLists(lists =>
-          lists.map(entry =>
-            entry.id === list.id
-              ? {
-                  ...entry,
-                  items: entry.items.map(todo =>
-                    todo.id === item.id
-                      ? { ...todo, done: nextDone, notificationId: nextNotificationId ?? null }
-                      : todo
-                  ),
-                }
-              : entry
-          )
-        );
-      }
+      if (list && item) return { list, item };
     }
+    for (const list of todoLists) {
+      const item = list.items.find(entry => entry.eventId === eventId);
+      if (item) return { list, item };
+    }
+    return null;
+  };
 
-    setCalendarEvents(events => events.map(entry => entry.id === eventId ? { ...entry, done: nextDone } : entry));
+  const deleteCalendarEvent = async (eventId: string, deleteTodo: boolean) => {
+    const linked = findTodoForEvent(eventId);
+    const notificationId = linked?.item.notificationId || null;
+    if (notificationId) await cancelTodoReminder(notificationId);
+
+    setCalendarEvents(events => events.filter(event => event.id !== eventId));
+
+    if (linked) {
+      setTodoLists(lists =>
+        lists.map(list =>
+          list.id === linked.list.id
+            ? {
+                ...list,
+                items: deleteTodo
+                  ? list.items.filter(item => item.id !== linked.item.id)
+                  : list.items.map(item =>
+                      item.id === linked.item.id
+                        ? { ...item, reminderAt: null, due: null, notificationId: null, eventId: null }
+                        : item
+                    ),
+              }
+            : list
+        )
+      );
+    }
+  };
+
+  const openLinkedTodoFromEvent = (eventId: string) => {
+    const linked = findTodoForEvent(eventId);
+    if (!linked) return;
+    setFlow('idle');
+    setTab('todos');
+    setTodoFocusFolderId(linked.list.folderId);
+    setTodoFocusListId(linked.list.id);
   };
 
   const renameTodoList = (listId: string, title: string) => {
@@ -757,6 +888,10 @@ export default function App() {
 
   const changeTodoCategoryColor = (folderId: string, color: string) => {
     setTodoTree(current => assignCategoryColor(current, folderId, color));
+  };
+
+  const changeKeeperCategoryColor = (folderId: string, color: string) => {
+    setKeeperTree(current => assignCategoryColor(current, folderId, color));
   };
 
   const updateTodoItemText = async (listId: string, itemId: string, text: string) => {
@@ -1036,6 +1171,7 @@ export default function App() {
         onRecord={startKeeperRecording}
         onRenameCategory={renameKeeperCategory}
         onDeleteCategory={deleteKeeperCategory}
+        onChangeCategoryColor={changeKeeperCategoryColor}
       />
     );
   } else if (tab === 'todos') {
@@ -1066,20 +1202,13 @@ export default function App() {
     screen = (
       <CalendarScreen
         todoTree={todoTree}
+        todoLists={todoLists}
         events={calendarEvents}
-        onOpenEvent={event => {
-          Alert.alert(
-            event.title,
-            event.allDay ? 'All day' : `${formatClockTime(event.startAt)} - ${formatClockTime(event.endAt)}`,
-            [
-              { text: 'Close', style: 'cancel' },
-              { text: 'Meeting', onPress: () => setCalendarEvents(events => events.map(entry => entry.id === event.id ? { ...entry, eventType: 'meeting' } : entry)) },
-              { text: 'Reminder', onPress: () => setCalendarEvents(events => events.map(entry => entry.id === event.id ? { ...entry, eventType: 'reminder' } : entry)) },
-              { text: 'Task', onPress: () => setCalendarEvents(events => events.map(entry => entry.id === event.id ? { ...entry, eventType: 'task' } : entry)) },
-            ]
-          );
-        }}
+        onOpenEvent={() => {}}
         onToggleEventDone={toggleCalendarEventDone}
+        onDeleteEvent={eventId => deleteCalendarEvent(eventId, false)}
+        onDeleteEventAndTodo={eventId => deleteCalendarEvent(eventId, true)}
+        onOpenLinkedTodo={openLinkedTodoFromEvent}
         onRescheduleEvent={(eventId, startAt, endAt, allDay) => {
           console.log('[CalendarDrag] updateScheduledItem input', {
             eventId,
@@ -1124,16 +1253,6 @@ export default function App() {
             </TouchableOpacity>
           ) : null}
         </View>
-        {pending ? (
-          <ReviewScreen
-            visible
-            pending={pending}
-            tree={reviewTree}
-            todoLists={todoLists}
-            onApprove={approvePending}
-            onDiscard={discardPending}
-          />
-        ) : null}
         {currentReminder ? (
           <TodoReminderModal
             visible
@@ -1185,6 +1304,83 @@ export default function App() {
           </View>
         </Modal>
       </SafeAreaView>
+      <Modal
+        visible={!!pending}
+        transparent={true}
+        animationType="slide"
+        statusBarTranslucent={true}
+        onRequestClose={() => {}}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          justifyContent: 'flex-end',
+        }}>
+          <View style={{
+            height: '88%',
+            backgroundColor: '#f6f1e3',
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            overflow: 'hidden',
+          }}>
+            <View style={{ padding: 20, borderBottomWidth: 1, borderBottomColor: '#ddd2b3' }}>
+              <Text style={{ fontSize: 11, letterSpacing: 2, color: '#8a7d63', textAlign: 'center' }}>REVIEW</Text>
+              <Text style={{ fontSize: 26, fontWeight: '700', color: '#3a2e1f', textAlign: 'center', marginTop: 4 }}>
+                {pending?.contentType === 'todo_items' ? 'New to-dos' :
+                 pending?.contentType === 'calendar_entries' ? 'New events' : 'New note'}
+              </Text>
+            </View>
+
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ padding: 20, paddingBottom: 24 }}
+              showsVerticalScrollIndicator={true}
+              bounces={true}
+            >
+              <ReviewContent pending={pending} tree={reviewTree} todoLists={todoLists} />
+            </ScrollView>
+
+            <View style={{
+              flexDirection: 'row',
+              padding: 16,
+              paddingBottom: 32,
+              gap: 12,
+              borderTopWidth: 1,
+              borderTopColor: '#ddd2b3',
+              backgroundColor: '#f6f1e3',
+            }}>
+              <TouchableOpacity
+                onPress={discardPending}
+                style={{
+                  flex: 1,
+                  paddingVertical: 16,
+                  borderRadius: 30,
+                  borderWidth: 1,
+                  borderColor: '#ddd2b3',
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 15, color: '#8a7d63' }}>Discard</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => approvePending()}
+                style={{
+                  flex: 2,
+                  paddingVertical: 16,
+                  borderRadius: 30,
+                  backgroundColor: '#3a2e1f',
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 15, color: '#f6f1e3', fontWeight: '600' }}>
+                  {pending?.contentType === 'todo_items' ? 'Add tasks' :
+                   pending?.contentType === 'calendar_entries' ? 'Add to calendar' : 'Approve'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </GestureHandlerRootView>
   );
 }
@@ -1277,5 +1473,66 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: FONTS.size.sm,
     fontWeight: '600',
+  },
+  reviewBody: {
+    gap: 12,
+  },
+  reviewSummaryCard: {
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    borderWidth: 1,
+    borderColor: '#ddd2b3',
+    borderRadius: 12,
+    padding: 14,
+    gap: 6,
+  },
+  reviewTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#3a2e1f',
+    lineHeight: 26,
+  },
+  reviewParagraph: {
+    fontSize: 14,
+    color: '#5f503b',
+    lineHeight: 21,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    borderWidth: 1,
+    borderColor: '#ddd2b3',
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+  },
+  reviewBullet: {
+    color: '#3a2e1f',
+    fontSize: 22,
+    lineHeight: 24,
+    width: 18,
+    textAlign: 'center',
+  },
+  reviewRowText: {
+    flex: 1,
+    gap: 4,
+  },
+  reviewItemTitle: {
+    fontSize: 15,
+    color: '#3a2e1f',
+    fontWeight: '700',
+    lineHeight: 21,
+  },
+  reviewMeta: {
+    fontSize: 13,
+    color: '#8a7d63',
+    lineHeight: 19,
+  },
+  reviewEmptyText: {
+    fontSize: 15,
+    color: '#8a7d63',
+    lineHeight: 22,
+    textAlign: 'center',
+    paddingVertical: 24,
   },
 });

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -14,13 +15,15 @@ import {
 } from 'react-native-gesture-handler';
 import TopBar from '../components/TopBar';
 import { COLORS, EVENT_TYPE_LABELS, FONTS } from '../constants';
-import { CalendarEvent, FolderNode } from '../types';
+import { CalendarEvent, FolderNode, TodoList } from '../types';
 import {
   addDays,
   eventOccursOnDay,
+  flattenFolders,
   formatClockTime,
   formatMonthLabel,
   formatShortDate,
+  folderPathLabel,
   getFolderColor,
   sameDay,
   startOfDay,
@@ -32,10 +35,14 @@ type ViewMode = 'day' | 'week' | 'month';
 
 interface Props {
   todoTree: FolderNode;
+  todoLists: TodoList[];
   events: CalendarEvent[];
   onOpenEvent: (event: CalendarEvent) => void;
   onToggleEventDone: (eventId: string) => void | Promise<void>;
   onRescheduleEvent: (eventId: string, startAt: number, endAt: number, allDay: boolean) => void;
+  onDeleteEvent: (eventId: string) => void | Promise<void>;
+  onDeleteEventAndTodo: (eventId: string) => void | Promise<void>;
+  onOpenLinkedTodo: (eventId: string) => void;
 }
 
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
@@ -43,9 +50,77 @@ const HOUR_HEIGHT = 60;
 const SNAP_MINUTES = 15;
 const DEFAULT_SCROLL_HOUR = 7;
 
-export default function CalendarScreen({ todoTree, events, onOpenEvent, onToggleEventDone, onRescheduleEvent }: Props) {
+export default function CalendarScreen({
+  todoTree,
+  todoLists,
+  events,
+  onOpenEvent,
+  onToggleEventDone,
+  onRescheduleEvent,
+  onDeleteEvent,
+  onDeleteEventAndTodo,
+  onOpenLinkedTodo,
+}: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()));
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const selectedEvent = events.find(event => event.id === selectedEventId) || null;
+  const folderList = useMemo(() => flattenFolders(todoTree), [todoTree]);
+
+  const linkedTodoForEvent = (eventId: string) => {
+    const event = events.find(entry => entry.id === eventId);
+    if (event?.todoListId && event.todoItemId) {
+      const list = todoLists.find(entry => entry.id === event.todoListId);
+      const item = list?.items.find(entry => entry.id === event.todoItemId);
+      if (list && item) return { list, item };
+    }
+    for (const list of todoLists) {
+      const item = list.items.find(entry => entry.eventId === eventId);
+      if (item) return { list, item };
+    }
+    return null;
+  };
+
+  const confirmDeleteEvent = (event: CalendarEvent) => {
+    Alert.alert('Delete this event?', event.title, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete event',
+        style: 'destructive',
+        onPress: () => {
+          setSelectedEventId(null);
+          onDeleteEvent(event.id);
+        },
+      },
+    ]);
+  };
+
+  const confirmDeleteEventAndTodo = (event: CalendarEvent) => {
+    Alert.alert('Delete this event and its to-do item?', event.title, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete both',
+        style: 'destructive',
+        onPress: () => {
+          setSelectedEventId(null);
+          onDeleteEventAndTodo(event.id);
+        },
+      },
+    ]);
+  };
+
+  const showQuickActions = (event: CalendarEvent) => {
+    const linkedTodo = linkedTodoForEvent(event.id);
+    Alert.alert(event.title, 'Choose an action', [
+      { text: event.done ? 'Mark not done' : 'Mark done', onPress: () => onToggleEventDone(event.id) },
+      { text: 'Edit time', onPress: () => setSelectedEventId(event.id) },
+      { text: 'Delete event', style: 'destructive', onPress: () => confirmDeleteEvent(event) },
+      ...(linkedTodo
+        ? [{ text: 'Delete event + to-do', style: 'destructive' as const, onPress: () => confirmDeleteEventAndTodo(event) }]
+        : []),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
 
   const dayEvents = useMemo(
     () =>
@@ -113,7 +188,11 @@ export default function CalendarScreen({ todoTree, events, onOpenEvent, onToggle
           todoTree={todoTree}
           day={selectedDate}
           events={dayEvents}
-          onOpenEvent={onOpenEvent}
+          onOpenEvent={event => {
+            onOpenEvent(event);
+            setSelectedEventId(event.id);
+          }}
+          onLongPressEvent={showQuickActions}
           onToggleEventDone={onToggleEventDone}
           onRescheduleEvent={onRescheduleEvent}
         />
@@ -144,7 +223,12 @@ export default function CalendarScreen({ todoTree, events, onOpenEvent, onToggle
                     <TouchableOpacity
                       key={event.id}
                       style={styles.weekEventWrap}
-                      onPress={() => onOpenEvent(event)}
+                      onPress={() => {
+                        onOpenEvent(event);
+                        setSelectedEventId(event.id);
+                      }}
+                      onLongPress={() => showQuickActions(event)}
+                      delayLongPress={260}
                       activeOpacity={0.82}
                     >
                       <View
@@ -234,6 +318,21 @@ export default function CalendarScreen({ todoTree, events, onOpenEvent, onToggle
           </View>
         </ScrollView>
       ) : null}
+      <EventDetailModal
+        event={selectedEvent}
+        linkedTodo={selectedEvent ? linkedTodoForEvent(selectedEvent.id) : null}
+        categoryLabel={
+          selectedEvent?.categoryFolderId ? folderPathLabel(selectedEvent.categoryFolderId, folderList) : 'None'
+        }
+        onClose={() => setSelectedEventId(null)}
+        onOpenLinkedTodo={() => {
+          if (!selectedEvent) return;
+          setSelectedEventId(null);
+          onOpenLinkedTodo(selectedEvent.id);
+        }}
+        onDeleteEvent={event => confirmDeleteEvent(event)}
+        onDeleteEventAndTodo={event => confirmDeleteEventAndTodo(event)}
+      />
     </View>
   );
 }
@@ -243,6 +342,7 @@ function DayView({
   day,
   events,
   onOpenEvent,
+  onLongPressEvent,
   onToggleEventDone,
   onRescheduleEvent,
 }: {
@@ -250,6 +350,7 @@ function DayView({
   day: Date;
   events: CalendarEvent[];
   onOpenEvent: (event: CalendarEvent) => void;
+  onLongPressEvent: (event: CalendarEvent) => void;
   onToggleEventDone: (eventId: string) => void | Promise<void>;
   onRescheduleEvent: (eventId: string, startAt: number, endAt: number, allDay: boolean) => void;
 }) {
@@ -364,6 +465,8 @@ function DayView({
                 key={event.id}
                 style={[styles.allDayChip, event.done && styles.allDayChipDone]}
                 onPress={() => onOpenEvent(event)}
+                onLongPress={() => onLongPressEvent(event)}
+                delayLongPress={260}
                 activeOpacity={0.82}
               >
                 <TouchableOpacity
@@ -500,6 +603,8 @@ function DayView({
               <TouchableOpacity
                 style={styles.eventTouch}
                 onPress={() => onOpenEvent(event)}
+                onLongPress={() => onLongPressEvent(event)}
+                delayLongPress={260}
                 activeOpacity={0.82}
               >
                 <View style={styles.eventTitleRow}>
@@ -528,6 +633,86 @@ function DayView({
         })}
       </View>
     </ScrollView>
+  );
+}
+
+function EventDetailModal({
+  event,
+  linkedTodo,
+  categoryLabel,
+  onClose,
+  onOpenLinkedTodo,
+  onDeleteEvent,
+  onDeleteEventAndTodo,
+}: {
+  event: CalendarEvent | null;
+  linkedTodo: { list: TodoList; item: TodoList['items'][number] } | null;
+  categoryLabel: string;
+  onClose: () => void;
+  onOpenLinkedTodo: () => void;
+  onDeleteEvent: (event: CalendarEvent) => void;
+  onDeleteEventAndTodo: (event: CalendarEvent) => void;
+}) {
+  if (!event) return null;
+  const dateLabel = new Date(event.startAt).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const timeLabel = event.allDay ? 'All day' : `${formatClockTime(event.startAt)} - ${formatClockTime(event.endAt)}`;
+
+  return (
+    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+      <View style={styles.detailScrim}>
+        <TouchableOpacity style={styles.detailDismissArea} activeOpacity={1} onPress={onClose} />
+        <View style={styles.detailSheet}>
+          <View style={styles.detailHeader}>
+            <View style={styles.detailTitleWrap}>
+              <Text style={styles.detailEyebrow}>{EVENT_TYPE_LABELS[event.eventType]}</Text>
+              <Text style={styles.detailTitle}>{event.title}</Text>
+            </View>
+            <TouchableOpacity style={styles.detailCloseBtn} onPress={onClose} activeOpacity={0.8}>
+              <Text style={styles.detailCloseText}>x</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.detailRows}>
+            <Text style={styles.detailRowText}>Date: {dateLabel}</Text>
+            <Text style={styles.detailRowText}>Time: {timeLabel}</Text>
+            <Text style={styles.detailRowText}>Category: {categoryLabel}</Text>
+            <Text style={styles.detailRowText}>Status: {event.done ? 'Done' : 'Open'}</Text>
+            {linkedTodo ? (
+              <TouchableOpacity style={styles.linkedTodoRow} onPress={onOpenLinkedTodo} activeOpacity={0.82}>
+                <Text style={styles.linkedTodoText}>To-do list: {linkedTodo.list.title}</Text>
+                <Text style={styles.linkedTodoHint}>Open linked to-do</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.detailRowText}>To-do list: Not linked</Text>
+            )}
+          </View>
+
+          <View style={styles.detailActions}>
+            <TouchableOpacity
+              style={styles.detailDeleteBtn}
+              onPress={() => onDeleteEvent(event)}
+              activeOpacity={0.82}
+            >
+              <Text style={styles.detailDeleteText}>Delete event</Text>
+            </TouchableOpacity>
+            {linkedTodo ? (
+              <TouchableOpacity
+                style={styles.detailDeleteStrongBtn}
+                onPress={() => onDeleteEventAndTodo(event)}
+                activeOpacity={0.82}
+              >
+                <Text style={styles.detailDeleteStrongText}>Delete event and to-do</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -761,5 +946,103 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     backgroundColor: 'rgba(138, 125, 99, 0.2)',
+  },
+  detailScrim: {
+    flex: 1,
+    backgroundColor: 'rgba(45, 36, 29, 0.28)',
+    justifyContent: 'flex-end',
+  },
+  detailDismissArea: { flex: 1 },
+  detailSheet: {
+    backgroundColor: COLORS.bg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 18,
+    gap: 16,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  detailTitleWrap: { flex: 1 },
+  detailEyebrow: {
+    color: COLORS.brownLight,
+    fontSize: FONTS.size.xs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  detailTitle: {
+    color: COLORS.brown,
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 28,
+  },
+  detailCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.cream,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailCloseText: { color: COLORS.brown, fontSize: 16, fontWeight: '800' },
+  detailRows: {
+    backgroundColor: COLORS.white50,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+  },
+  detailRowText: {
+    color: COLORS.brownMid,
+    fontSize: FONTS.size.sm,
+    lineHeight: 20,
+  },
+  linkedTodoRow: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+    paddingTop: 10,
+    marginTop: 2,
+  },
+  linkedTodoText: {
+    color: COLORS.brown,
+    fontSize: FONTS.size.sm,
+    fontWeight: '700',
+  },
+  linkedTodoHint: {
+    color: COLORS.red,
+    fontSize: FONTS.size.xs,
+    fontWeight: '700',
+    marginTop: 3,
+  },
+  detailActions: { gap: 10 },
+  detailDeleteBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    paddingVertical: 13,
+    alignItems: 'center',
+    backgroundColor: COLORS.white50,
+  },
+  detailDeleteText: {
+    color: COLORS.brown,
+    fontSize: FONTS.size.sm,
+    fontWeight: '700',
+  },
+  detailDeleteStrongBtn: {
+    borderRadius: 14,
+    paddingVertical: 13,
+    alignItems: 'center',
+    backgroundColor: COLORS.red,
+  },
+  detailDeleteStrongText: {
+    color: '#fff7f1',
+    fontSize: FONTS.size.sm,
+    fontWeight: '800',
   },
 });

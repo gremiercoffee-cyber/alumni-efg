@@ -9,9 +9,10 @@ import {
   View,
 } from 'react-native';
 import ActionSheetModal from '../components/ActionSheetModal';
+import ColorPickerModal from '../components/ColorPickerModal';
 import NamePromptModal from '../components/NamePromptModal';
 import TopBar from '../components/TopBar';
-import { COLORS, FONTS, TODO_CATEGORY_PALETTE } from '../constants';
+import { COLORS, FONTS } from '../constants';
 import { formatReminderLabel, tintColor } from '../utils';
 import { FolderNode, TodoItem, TodoList } from '../types';
 
@@ -463,6 +464,7 @@ function FolderSection({
   const expanded = expandedFolders[folder.id] ?? false;
   const isFocused = focusedFolderId === folder.id;
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameDraft, setRenameDraft] = useState(folder.name);
   const accentColor = folder.color || null;
@@ -585,14 +587,7 @@ function FolderSection({
             label: 'Change color',
             onPress: () => {
               setActionsOpen(false);
-              Alert.alert(
-                'Change category color',
-                undefined,
-                TODO_CATEGORY_PALETTE.map(color => ({
-                  text: color,
-                  onPress: () => onChangeCategoryColor(folder.id, color),
-                })).concat([{ text: 'Cancel', style: 'cancel' }])
-              );
+              setColorPickerOpen(true);
             },
           },
           {
@@ -618,6 +613,16 @@ function FolderSection({
           },
         ]}
         onCancel={() => setActionsOpen(false)}
+      />
+
+      <ColorPickerModal
+        visible={colorPickerOpen}
+        selectedColor={accentColor}
+        onSelectColor={color => {
+          onChangeCategoryColor(folder.id, color);
+          setColorPickerOpen(false);
+        }}
+        onCancel={() => setColorPickerOpen(false)}
       />
 
       <NamePromptModal

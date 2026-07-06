@@ -14,10 +14,11 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ActionSheetModal from '../components/ActionSheetModal';
+import ColorPickerModal from '../components/ColorPickerModal';
 import NamePromptModal from '../components/NamePromptModal';
 import TopBar from '../components/TopBar';
 import { COLORS, FONTS } from '../constants';
-import { flattenFolders, folderPathLabel, formatDate } from '../utils';
+import { findNode, flattenFolders, folderPathLabel, formatDate } from '../utils';
 import { FolderNode, KeeperItem } from '../types';
 
 interface Props {
@@ -30,6 +31,7 @@ interface Props {
   onRecord: () => void;
   onRenameCategory: (categoryId: string, name: string) => void;
   onDeleteCategory: (categoryId: string) => void;
+  onChangeCategoryColor: (categoryId: string, color: string) => void;
 }
 
 export default function KeeperScreen({
@@ -42,11 +44,13 @@ export default function KeeperScreen({
   onRecord,
   onRenameCategory,
   onDeleteCategory,
+  onChangeCategoryColor,
 }: Props) {
   const [modalVisible, setModalVisible] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [categoryActions, setCategoryActions] = useState<{ id: string; name: string } | null>(null);
+  const [colorCategory, setColorCategory] = useState<{ id: string; name: string; color: string | null } | null>(null);
   const [renameCategory, setRenameCategory] = useState<{ id: string; name: string } | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [brokenFavicons, setBrokenFavicons] = useState<Record<string, boolean>>({});
@@ -103,6 +107,11 @@ export default function KeeperScreen({
   const getFaviconUri = (url: string | null) => {
     const domain = getDomain(url);
     return domain ? `https://www.google.com/s2/favicons?sz=64&domain=${domain}` : null;
+  };
+
+  const getCategoryColor = (categoryId: string): string | null => {
+    if (categoryId === 'all') return null;
+    return findNode(keeperTree, categoryId)?.color || null;
   };
 
   return (
@@ -237,6 +246,9 @@ export default function KeeperScreen({
                   }}
                   activeOpacity={0.82}
                 >
+                  {getCategoryColor(category.id) ? (
+                    <View style={[styles.sidebarColorDot, { backgroundColor: getCategoryColor(category.id)! }]} />
+                  ) : null}
                   <Text
                     style={[
                       styles.sidebarItemText,
@@ -250,8 +262,7 @@ export default function KeeperScreen({
                   <TouchableOpacity
                     style={styles.sidebarEditBtn}
                     onPress={() => {
-                      setRenameCategory({ id: category.id, name: category.name });
-                      setRenameDraft(category.name);
+                      setCategoryActions({ id: category.id, name: category.name });
                     }}
                     activeOpacity={0.82}
                   >
@@ -314,6 +325,18 @@ export default function KeeperScreen({
             },
           },
           {
+            label: 'Change color',
+            onPress: () => {
+              if (!categoryActions) return;
+              setColorCategory({
+                id: categoryActions.id,
+                name: categoryActions.name,
+                color: getCategoryColor(categoryActions.id),
+              });
+              setCategoryActions(null);
+            },
+          },
+          {
             label: 'Delete',
             destructive: true,
             onPress: () => {
@@ -335,6 +358,17 @@ export default function KeeperScreen({
           },
         ]}
         onCancel={() => setCategoryActions(null)}
+      />
+
+      <ColorPickerModal
+        visible={!!colorCategory}
+        selectedColor={colorCategory?.color || null}
+        onSelectColor={color => {
+          if (!colorCategory) return;
+          onChangeCategoryColor(colorCategory.id, color);
+          setColorCategory(null);
+        }}
+        onCancel={() => setColorCategory(null)}
       />
 
       <NamePromptModal
@@ -592,8 +626,18 @@ const styles = StyleSheet.create({
   },
   sidebarItemButton: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 11,
+  },
+  sidebarColorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(58, 46, 31, 0.18)',
   },
   sidebarItemActive: {
     backgroundColor: COLORS.brown,

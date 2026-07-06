@@ -16,16 +16,22 @@ export const COLORS = {
   white60: 'rgba(255,255,255,0.6)',
 };
 
-export const TODO_CATEGORY_PALETTE = [
-  '#b96f4a',
-  '#7b8f5d',
-  '#748ca7',
-  '#ad8c48',
-  '#9a6f64',
-  '#6d8b85',
-  '#a07e57',
-  '#8c7bb0',
+export const COLOR_PALETTE = [
+  '#B96F4A',
+  '#C4956A',
+  '#D4A853',
+  '#8FA86E',
+  '#5E8C6A',
+  '#7B8F9D',
+  '#748CA7',
+  '#8B7BA8',
+  '#A67B8A',
+  '#7A6B5A',
+  '#9E6B5A',
+  '#6B8A7A',
 ];
+
+export const TODO_CATEGORY_PALETTE = COLOR_PALETTE;
 
 export const EVENT_TYPE_LABELS = {
   meeting: 'Meeting',
