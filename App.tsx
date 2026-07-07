@@ -1508,7 +1508,7 @@ export default function App() {
             </View>
 
             <ScrollView
-              style={{ flex: 1 }}
+              style={{ flex: 1, marginBottom: 112 }}
               contentContainerStyle={{ padding: 20, paddingBottom: 24 }}
               showsVerticalScrollIndicator={true}
               bounces={true}
@@ -1524,6 +1524,10 @@ export default function App() {
               borderTopWidth: 1,
               borderTopColor: '#ddd2b3',
               backgroundColor: '#f6f1e3',
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
             }}>
               <TouchableOpacity
                 onPress={discardPending}
