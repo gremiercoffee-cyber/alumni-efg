@@ -35,6 +35,7 @@ import {
   getFolderTree,
   getKeeperCategories,
   getKeeperItems,
+  getNotes,
   getTodoCategories,
   getTodoLists,
   getUserSettings,
@@ -303,18 +304,30 @@ export default function App() {
     let active = true;
     setSyncing(true);
     setLoaded(false);
+    setError(null);
 
-    Promise.all([
-      getFolderTree(userId),
-      getTodoCategories(userId),
-      getKeeperCategories(userId),
-      getNotes(userId),
-      getKeeperItems(userId),
-      getTodoLists(userId),
-      getCalendarEvents(userId),
-      getUserSettings(userId),
-    ])
-      .then(([nextTree, todoCategories, nextKeeperTree, nextNotes, nextKeeperItems, nextTodoLists, nextCalendarEvents, nextSettings]) => {
+    const loadSyncedData = async () => {
+      try {
+        const [
+          nextTree,
+          todoCategories,
+          nextKeeperTree,
+          nextNotes,
+          nextKeeperItems,
+          nextTodoLists,
+          nextCalendarEvents,
+          nextSettings,
+        ] = await Promise.all([
+          getFolderTree(userId),
+          getTodoCategories(userId),
+          getKeeperCategories(userId),
+          getNotes(userId),
+          getKeeperItems(userId),
+          getTodoLists(userId),
+          getCalendarEvents(userId),
+          getUserSettings(userId),
+        ]);
+
         if (!active) return;
         setTree(nextTree);
         setTodoTree(todoCategories[0] || EMPTY_TREE);
@@ -325,14 +338,18 @@ export default function App() {
         setCalendarEvents(nextCalendarEvents);
         if (nextSettings) setSettings(prev => ({ ...prev, ...nextSettings }));
         setLoaded(true);
-      })
-      .catch(errorValue => {
+      } catch (errorValue: any) {
         console.error('Supabase load error', errorValue);
-        if (active) setError('Could not load your synced data.');
-      })
-      .finally(() => {
+        if (active) {
+          const detail = errorValue?.message ? ` ${errorValue.message}` : '';
+          setError(`Could not load your synced data.${detail}`);
+        }
+      } finally {
         if (active) setSyncing(false);
-      });
+      }
+    };
+
+    loadSyncedData();
 
     return () => {
       active = false;
@@ -1257,7 +1274,8 @@ export default function App() {
         <SafeAreaView style={styles.safe}>
           <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
           <View style={styles.loadingScreen}>
-            <Text style={styles.loadingTitle}>Syncing your notes...</Text>
+            <Text style={styles.loadingTitle}>{error ? 'Sync failed' : 'Syncing your notes...'}</Text>
+            {error ? <Text style={styles.loadingError}>{error}</Text> : null}
           </View>
         </SafeAreaView>
       </GestureHandlerRootView>
@@ -1565,6 +1583,14 @@ const styles = StyleSheet.create({
     color: COLORS.brown,
     fontSize: FONTS.size.lg,
     fontWeight: '700',
+  },
+  loadingError: {
+    color: COLORS.brownLight,
+    fontSize: FONTS.size.sm,
+    lineHeight: 20,
+    marginTop: 10,
+    maxWidth: 320,
+    textAlign: 'center',
   },
   sheetScrim: {
     flex: 1,
