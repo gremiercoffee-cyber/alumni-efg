@@ -242,8 +242,9 @@ export default function KeeperScreen({
 
   return (
     <View style={styles.container}>
-      <TopBar subtitle={`${items.length} kept`} title="Keeper" />
-      <View style={styles.filterRow}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <TopBar subtitle={`${items.length} kept`} title="Keeper" />
+        <View style={styles.filterRow}>
         <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarOpen(open => !open)} activeOpacity={0.82}>
           <Text style={styles.menuBtnText}>≡</Text>
         </TouchableOpacity>
@@ -252,8 +253,7 @@ export default function KeeperScreen({
             {activeCategoryId === 'all' ? 'All items' : folderPathLabel(activeCategoryId, categories)}
           </Text>
         </View>
-      </View>
-      <ScrollView contentContainerStyle={styles.content}>
+        </View>
         <View style={styles.hero}>
           <Text style={styles.heroCount}>{items.length}</Text>
           <Text style={styles.heroLabel}>{items.length === 1 ? 'Kept item' : 'Kept items'}</Text>
@@ -815,7 +815,7 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.xs,
     fontWeight: '600',
   },
-  content: { padding: 16, paddingBottom: 28 },
+  content: { paddingHorizontal: 16, paddingBottom: 28 },
   hero: {
     alignItems: 'center',
     paddingTop: 4,

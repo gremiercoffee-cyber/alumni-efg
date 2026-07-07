@@ -181,8 +181,8 @@ export default function SettingsScreen({ settings, onSave, onSignOut }: Props) {
 
   return (
     <View style={styles.container}>
-      <TopBar subtitle="Configure" title="Settings" />
       <ScrollView contentContainerStyle={styles.content}>
+        <TopBar subtitle="Configure" title="Settings" />
         <View style={styles.hero}>
           <Text style={styles.intro}>
             Fill in any sections that feel useful. You can tap the mic and talk naturally. The more general context you give, the better the app can organize notes and suggest reminders.
@@ -221,7 +221,7 @@ export default function SettingsScreen({ settings, onSave, onSignOut }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: 20, paddingBottom: 40 },
+  content: { paddingHorizontal: 20, paddingBottom: 40 },
   hero: {
     alignItems: 'center',
     paddingBottom: 18,

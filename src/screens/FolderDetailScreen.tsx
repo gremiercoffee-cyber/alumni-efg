@@ -70,35 +70,35 @@ export default function FolderDetailScreen({
 
   return (
     <View style={styles.container}>
-      <TopBar subtitle="Notes" title={folder.name} onBack={onBack} />
-
-      <View style={styles.headerActionRow}>
-        <TouchableOpacity
-          style={styles.headerActionBtn}
-          onPress={() => setActionFolder({ id: folder.id, name: folder.name })}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.headerActionText}>Rename or delete category</Text>
-        </TouchableOpacity>
-      </View>
-
-      {folder.children.length > 0 && (
-        <View style={styles.subfolderRow}>
-          {folder.children.map(c => (
-            <TouchableOpacity
-              key={c.id}
-              style={styles.subfolderChip}
-              onPress={() => onOpenFolder(c)}
-              onLongPress={() => setActionFolder({ id: c.id, name: c.name })}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.subfolderText}>{c.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
       <ScrollView contentContainerStyle={styles.content}>
+        <TopBar subtitle="Notes" title={folder.name} onBack={onBack} />
+
+        <View style={styles.headerActionRow}>
+          <TouchableOpacity
+            style={styles.headerActionBtn}
+            onPress={() => setActionFolder({ id: folder.id, name: folder.name })}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.headerActionText}>Rename or delete category</Text>
+          </TouchableOpacity>
+        </View>
+
+        {folder.children.length > 0 && (
+          <View style={styles.subfolderRow}>
+            {folder.children.map(c => (
+              <TouchableOpacity
+                key={c.id}
+                style={styles.subfolderChip}
+                onPress={() => onOpenFolder(c)}
+                onLongPress={() => setActionFolder({ id: c.id, name: c.name })}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.subfolderText}>{c.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {folderNotes.length === 0 ? (
           <Text style={styles.empty}>No notes in this category yet.</Text>
         ) : (
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   subfolderText: { fontSize: FONTS.size.xs, color: COLORS.brownMid },
-  content: { padding: 16 },
+  content: { paddingHorizontal: 16, paddingBottom: 16 },
   empty: {
     fontSize: FONTS.size.md,
     color: COLORS.brownFaint,

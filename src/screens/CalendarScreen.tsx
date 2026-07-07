@@ -160,8 +160,8 @@ export default function CalendarScreen({
     else setSelectedDate(current => new Date(current.getFullYear(), current.getMonth() + step, 1));
   };
 
-  return (
-    <View style={styles.container}>
+  const calendarHeader = (
+    <>
       <TopBar subtitle="Schedule" title={title} />
       <View style={styles.controls}>
         <TouchableOpacity style={styles.navBtn} onPress={() => moveRange(-1)} activeOpacity={0.8}>
@@ -185,9 +185,14 @@ export default function CalendarScreen({
           <Text style={styles.navBtnText}>Next</Text>
         </TouchableOpacity>
       </View>
+    </>
+  );
 
+  return (
+    <View style={styles.container}>
       {viewMode === 'day' ? (
         <DayView
+          header={calendarHeader}
           todoTree={todoTree}
           todoLists={todoLists}
           day={selectedDate}
@@ -204,6 +209,7 @@ export default function CalendarScreen({
 
       {viewMode === 'week' ? (
         <ScrollView contentContainerStyle={styles.weekContent}>
+          {calendarHeader}
           <View style={styles.weekGrid}>
             {weekDays.map(day => {
               const items = events.filter(event => eventOccursOnDay(event, day));
@@ -279,6 +285,7 @@ export default function CalendarScreen({
 
       {viewMode === 'month' ? (
         <ScrollView contentContainerStyle={styles.monthContent}>
+          {calendarHeader}
           <View style={styles.monthHeaderRow}>
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(label => (
               <Text key={label} style={styles.monthHeaderText}>{label}</Text>
@@ -349,6 +356,7 @@ export default function CalendarScreen({
 }
 
 function DayView({
+  header,
   todoTree,
   todoLists,
   day,
@@ -358,6 +366,7 @@ function DayView({
   onToggleEventDone,
   onRescheduleEvent,
 }: {
+  header: React.ReactNode;
   todoTree: FolderNode;
   todoLists: TodoList[];
   day: Date;
@@ -473,6 +482,7 @@ function DayView({
       contentContainerStyle={styles.dayContent}
       keyboardShouldPersistTaps="handled"
     >
+      {header}
       {events.filter(event => event.allDay).length > 0 ? (
         <View style={styles.allDayStrip}>
           <Text style={styles.allDayLabel}>All-day</Text>

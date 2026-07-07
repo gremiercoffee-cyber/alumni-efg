@@ -748,8 +748,8 @@ export default function ToDosScreen({
 
   return (
     <View style={styles.container}>
-      <TopBar subtitle="Category -> list -> items" title="To-Dos" />
       <ScrollView contentContainerStyle={styles.content}>
+        <TopBar subtitle="Category -> list -> items" title="To-Dos" />
         <View style={styles.toolbar}>
           <View style={styles.toolbarTextWrap}>
             <Text style={styles.toolbarTitle}>Your lists</Text>
@@ -886,7 +886,7 @@ export default function ToDosScreen({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  content: { padding: 12, paddingBottom: 28 },
+  content: { paddingHorizontal: 12, paddingBottom: 28 },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',

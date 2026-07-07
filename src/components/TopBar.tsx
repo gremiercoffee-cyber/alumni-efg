@@ -37,9 +37,10 @@ export default function TopBar({ title, subtitle, onBack, rightAction }: Props) 
 
 const styles = StyleSheet.create({
   container: {
+    width: '100%',
     paddingHorizontal: 20,
-    paddingTop: 14,
-    paddingBottom: 18,
+    paddingTop: 4,
+    paddingBottom: 10,
     backgroundColor: COLORS.bg,
     flexDirection: 'row',
     alignItems: 'center',
@@ -69,17 +70,17 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 64,
+    minHeight: 52,
   },
   subtitle: {
     fontSize: FONTS.size.xs,
     color: COLORS.brownLight,
     letterSpacing: 1.4,
-    marginBottom: 6,
+    marginBottom: 4,
     textAlign: 'center',
   },
   title: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '700',
     color: COLORS.brown,
     textAlign: 'center',

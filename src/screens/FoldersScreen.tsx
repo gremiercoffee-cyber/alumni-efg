@@ -123,27 +123,35 @@ export default function FoldersScreen({
 
   return (
     <View style={styles.container}>
-      <TopBar
-        subtitle="Browse"
-        title="Notes"
-        rightAction={
-          <TouchableOpacity style={styles.headerAction} onPress={openCreateModal} activeOpacity={0.8}>
-            <Text style={styles.headerActionIcon}>+</Text>
-          </TouchableOpacity>
-        }
-      />
-
       {tree.children.length === 0 ? (
-        <View style={styles.emptyState}>
+        <ScrollView contentContainerStyle={styles.emptyContent}>
+          <TopBar
+            subtitle="Browse"
+            title="Notes"
+            rightAction={
+              <TouchableOpacity style={styles.headerAction} onPress={openCreateModal} activeOpacity={0.8}>
+                <Text style={styles.headerActionIcon}>+</Text>
+              </TouchableOpacity>
+            }
+          />
           <Text style={styles.empty}>
             No notes yet. They'll appear here as you record notes, or you can create a category now.
           </Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={openCreateModal} activeOpacity={0.8}>
             <Text style={styles.primaryBtnText}>Create category</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
+          <TopBar
+            subtitle="Browse"
+            title="Notes"
+            rightAction={
+              <TouchableOpacity style={styles.headerAction} onPress={openCreateModal} activeOpacity={0.8}>
+                <Text style={styles.headerActionIcon}>+</Text>
+              </TouchableOpacity>
+            }
+          />
           {tree.children.map(folder => (
             <FolderRow
               key={folder.id}
@@ -217,11 +225,11 @@ export default function FoldersScreen({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  content: { paddingVertical: 8, paddingBottom: 120 },
-  emptyState: {
-    flex: 1,
+  content: { paddingTop: 0, paddingBottom: 120 },
+  emptyContent: {
+    flexGrow: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     paddingHorizontal: 28,
     paddingBottom: 40,
     gap: 18,
