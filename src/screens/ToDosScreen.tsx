@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -60,6 +61,56 @@ function countOpenItems(lists: TodoList[]): number {
   return lists.reduce((sum, list) => sum + list.items.filter(item => !item.done).length, 0);
 }
 
+function formatTodoItemForShare(item: TodoItem): string {
+  const status = item.done ? '[x]' : '[ ]';
+  const reminder = formatReminderLabel(item.reminderAt) || item.due;
+  return `${status} ${item.text}${reminder ? ` (${reminder})` : ''}`;
+}
+
+function formatTodoListForShare(list: TodoList): string {
+  const activeItems = list.items.filter(item => !item.done);
+  const completedItems = list.items.filter(item => item.done);
+  const lines = [list.title];
+
+  if (activeItems.length) {
+    lines.push('', 'Open');
+    activeItems.forEach(item => lines.push(formatTodoItemForShare(item)));
+  }
+
+  if (completedItems.length) {
+    lines.push('', 'Done');
+    completedItems.forEach(item => lines.push(formatTodoItemForShare(item)));
+  }
+
+  if (!activeItems.length && !completedItems.length) {
+    lines.push('', 'No items yet.');
+  }
+
+  return lines.join('\n');
+}
+
+async function shareTodoItem(item: TodoItem) {
+  try {
+    await Share.share({
+      title: item.text,
+      message: formatTodoItemForShare(item),
+    });
+  } catch {
+    // Native share can reject when dismissed on some devices.
+  }
+}
+
+async function shareTodoList(list: TodoList) {
+  try {
+    await Share.share({
+      title: list.title,
+      message: formatTodoListForShare(list),
+    });
+  } catch {
+    // Native share can reject when dismissed on some devices.
+  }
+}
+
 function TodoRow({
   item,
   listId,
@@ -73,6 +124,7 @@ function TodoRow({
   onEditReminder,
   onDeleteItem,
   onOpenSourceNote,
+  onShareItem,
   helperText,
 }: {
   item: TodoItem;
@@ -87,6 +139,7 @@ function TodoRow({
   onEditReminder: (listId: string, itemId: string) => void;
   onDeleteItem: (listId: string, itemId: string) => void | Promise<void>;
   onOpenSourceNote: (noteId: string) => void;
+  onShareItem: (item: TodoItem) => void;
   helperText?: string;
 }) {
   return (
@@ -153,6 +206,9 @@ function TodoRow({
         ) : null}
 
         <View style={styles.rowActions}>
+          <TouchableOpacity onPress={() => onShareItem(item)} activeOpacity={0.8}>
+            <Text style={styles.rowActionText}>Share</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => onEditReminder(listId, item.id)} activeOpacity={0.8}>
             <Text style={styles.rowActionText}>Reminder</Text>
           </TouchableOpacity>
@@ -269,35 +325,40 @@ function TodoListSection({
         accentColor ? { borderLeftWidth: 4, borderLeftColor: accentColor } : null,
       ]}
     >
-      <TouchableOpacity
-        style={styles.listHeader}
-        onPress={onToggleExpanded}
-        onLongPress={() => setActionsOpen(true)}
-        delayLongPress={240}
-        activeOpacity={0.85}
-      >
-        <View style={styles.listHeaderTextWrap}>
-          {editingListTitle ? (
-            <TextInput
-              style={styles.listTitleInput}
-              value={listTitleDraft}
-              onChangeText={setListTitleDraft}
-              autoFocus
-              onSubmitEditing={saveListTitle}
-              onBlur={saveListTitle}
-              returnKeyType="done"
-            />
-          ) : (
-            <TouchableOpacity onPress={() => setEditingListTitle(true)} activeOpacity={0.8}>
-              <Text style={styles.listTitle}>{list.title}</Text>
-            </TouchableOpacity>
-          )}
-          <Text style={styles.listMeta}>
-            {activeItems.length} open{completedItems.length ? ` | ${completedItems.length} done` : ''}
-          </Text>
-        </View>
-        <Text style={styles.chevron}>{expanded ? '-' : '+'}</Text>
-      </TouchableOpacity>
+      <View style={styles.listHeader}>
+        <TouchableOpacity
+          style={styles.listToggle}
+          onPress={onToggleExpanded}
+          onLongPress={() => setActionsOpen(true)}
+          delayLongPress={240}
+          activeOpacity={0.85}
+        >
+          <View style={styles.listHeaderTextWrap}>
+            {editingListTitle ? (
+              <TextInput
+                style={styles.listTitleInput}
+                value={listTitleDraft}
+                onChangeText={setListTitleDraft}
+                autoFocus
+                onSubmitEditing={saveListTitle}
+                onBlur={saveListTitle}
+                returnKeyType="done"
+              />
+            ) : (
+              <TouchableOpacity onPress={() => setEditingListTitle(true)} activeOpacity={0.8}>
+                <Text style={styles.listTitle}>{list.title}</Text>
+              </TouchableOpacity>
+            )}
+            <Text style={styles.listMeta}>
+              {activeItems.length} open{completedItems.length ? ` | ${completedItems.length} done` : ''}
+            </Text>
+          </View>
+          <Text style={styles.chevron}>{expanded ? '-' : '+'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.listShareBtn} onPress={() => shareTodoList(list)} activeOpacity={0.8}>
+          <Text style={styles.listShareBtnText}>Share</Text>
+        </TouchableOpacity>
+      </View>
 
       {expanded ? (
         <View style={styles.listBody}>
@@ -319,6 +380,7 @@ function TodoListSection({
                 onEditReminder={onEditReminder}
                 onDeleteItem={onDeleteItem}
                 onOpenSourceNote={onOpenSourceNote}
+                onShareItem={shareTodoItem}
               />
             ))
           )}
@@ -367,6 +429,7 @@ function TodoListSection({
                       onEditReminder={onEditReminder}
                       onDeleteItem={onDeleteItem}
                       onOpenSourceNote={onOpenSourceNote}
+                      onShareItem={shareTodoItem}
                       helperText="Tap the checkbox to move it back to active"
                     />
                   ))
@@ -381,6 +444,13 @@ function TodoListSection({
         title={list.title}
         message="Choose an action"
         options={[
+          {
+            label: 'Share / copy list',
+            onPress: () => {
+              setActionsOpen(false);
+              shareTodoList(list);
+            },
+          },
           {
             label: 'Rename',
             onPress: () => {
@@ -748,7 +818,7 @@ export default function ToDosScreen({
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <TopBar subtitle="Category -> list -> items" title="To-Dos" />
         <View style={styles.toolbar}>
           <View style={styles.toolbarTextWrap}>
@@ -1026,6 +1096,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
+  listToggle: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   listHeaderTextWrap: {
     flex: 1,
     paddingRight: 12,
@@ -1039,6 +1114,20 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.xs,
     color: COLORS.brownFaint,
     marginTop: 3,
+  },
+  listShareBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: COLORS.white50,
+    marginRight: 8,
+  },
+  listShareBtnText: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.brown,
+    fontWeight: '700',
   },
   listTitleInput: {
     backgroundColor: COLORS.white60,
