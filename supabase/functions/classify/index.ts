@@ -183,7 +183,7 @@ Rules:
 - If the speaker says multiple tasks in one sentence or recording, return one array item per task. Never bundle X, Y, and Z into a single todoItems entry.
 - For due dates, use urgency rules when provided. For to-do items, think of due as the best default reminder time suggestion. If no urgency is implied, leave due as null.
 - Prefer an existing folder when it fits. If none fits, propose a new folder under the closest parent.
-- For to-do items, prefer an existing running to-do list when it fits. Otherwise provide newTodoListTitle.
+- For to-do items, STRONGLY prefer an existing running to-do list. Match by topic, life area, or context — the list title does NOT need to be an exact match. Only set newTodoListTitle (and set existingTodoListId to null) when the new tasks are clearly about a completely different subject than every existing list. When in doubt, pick the closest existing list rather than creating a new one.
 - Output strictly valid JSON only.`;
 
   return askOpenAI(system, `Transcript:\n"""\n${transcript}\n"""`);
