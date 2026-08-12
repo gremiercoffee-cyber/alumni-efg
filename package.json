@@ -7,7 +7,8 @@
     "android": "expo run:android",
     "web": "expo start --web",
     "export:web": "expo export -p web",
-    "types": "supabase gen types typescript --linked > src/lib/database.types.ts"
+    "types": "supabase gen types typescript --linked > src/lib/database.types.ts",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo-google-fonts/poppins": "^0.2.3",

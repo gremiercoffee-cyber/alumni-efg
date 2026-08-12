@@ -79,8 +79,18 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
+      # Release, not debug, and one architecture rather than four.
+      #
+      # A debug build ships dev tooling, and prebuild targets armeabi-v7a,
+      # arm64-v8a, x86 and x86_64 -- four complete copies of Hermes and the React
+      # Native binaries, which is why the first APK came out at 123MB. x86 and
+      # x86_64 only ever run on emulators; armeabi-v7a is 32-bit devices, which
+      # in practice means phones older than about 2017.
+      #
+      # Still signed with the debug keystore (that is the template's default for
+      # release), so it sideloads exactly as before and still cannot go on Play.
       - name: Build APK
-        run: cd android && ./gradlew assembleDebug --no-daemon
+        run: cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
@@ -90,7 +100,8 @@ jobs:
         run: |
           VERSION=$(node -p "require('./app.json').expo.version")
           NAME="efg-alumni-v${VERSION}-build${{ github.run_number }}.apk"
-          mv android/app/build/outputs/apk/debug/app-debug.apk "$NAME"
+          mv android/app/build/outputs/apk/release/app-release.apk "$NAME"
+          echo "size=$(du -h "$NAME" | cut -f1)" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}-build${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
@@ -110,8 +121,11 @@ jobs:
           files: ${{ steps.apk.outputs.name }}
           generate_release_notes: true
           body: |
-            Android APK, debug-signed. Sideload it: download, open, allow
-            installs from this source if Android asks.
+            Android APK (${{ steps.apk.outputs.size }}), arm64 only.
 
-            Debug signing means this cannot go on the Play Store, and it installs
-            alongside rather than over a Play build. Fine for internal use.
+            Sideload it: download, open, allow installs from this source if
+            Android asks.
+
+            Built for arm64-v8a, which covers essentially every phone from about
+            2017 onward. It will not install on a 32-bit device. Debug-signed, so
+            it cannot go on the Play Store -- fine for internal use.
