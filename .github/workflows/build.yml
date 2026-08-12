@@ -4,10 +4,15 @@ on:
   push:
     branches:
       - main
+      - alumni-app
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Needed to create a Release and attach the APK to it.
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -28,6 +33,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # The android/ folder is no longer committed. Prebuild regenerates it from
+      # app.json every run, which is the only way the app name, package id,
+      # permissions, plugins and icons in app.json actually reach the APK -- with
+      # android/ checked in, those fields are silently ignored.
+      - name: Prebuild native project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -37,6 +52,8 @@ jobs:
           key: gradle-${{ hashFiles('**/*.gradle*') }}
           restore-keys: gradle-
 
+      # Fixed parameters, so the signing certificate -- and therefore the SHA-1
+      # that Google Sign-In has to be configured with -- is the same every build.
       - name: Create debug keystore
         run: |
           mkdir -p ~/.android
@@ -56,22 +73,39 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Bundle JS
-        run: |
-          mkdir -p android/app/src/main/assets
-          npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
-        env:
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-
       - name: Build APK
         run: cd android && ./gradlew assembleDebug --no-daemon
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
 
-      - name: Upload APK
+      - name: Name the APK
+        id: apk
+        run: |
+          VERSION=$(node -p "require('./app.json').expo.version")
+          NAME="efg-alumni-v${VERSION}-build${{ github.run_number }}.apk"
+          mv android/app/build/outputs/apk/debug/app-debug.apk "$NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}-build${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      # Kept alongside the release: artifacts are easier to grab mid-debugging,
+      # and they expire on their own instead of accumulating.
+      - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: notekeeper-debug
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: efg-alumni-apk
+          path: ${{ steps.apk.outputs.name }}
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.apk.outputs.tag }}
+          name: EFG Alumni ${{ steps.apk.outputs.tag }}
+          files: ${{ steps.apk.outputs.name }}
+          generate_release_notes: true
+          body: |
+            Android APK, debug-signed. Sideload it: download, open, allow
+            installs from this source if Android asks.
+
+            Debug signing means this cannot go on the Play Store, and it installs
+            alongside rather than over a Play build. Fine for internal use.

@@ -11,3 +11,13 @@ npm-debug.*
 *.orig.*
 web-build/
 .DS_Store
+
+# expo build artifacts (these were tracked by mistake)
+.tmp-export/
+.expo-check/
+web-build/
+migration/out/
+__pycache__/
+*.pyc
+android/
+ios/

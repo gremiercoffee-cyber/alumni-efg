@@ -1,35 +1,24 @@
 {
   "expo": {
-    "name": "NoteKeeper",
-    "slug": "notekeeper",
-    "scheme": "com.gremier.notekeeper",
+    "name": "EFG Alumni",
+    "slug": "efg-alumni",
+    "scheme": "efgalumni",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "android": {
-      "package": "com.gremier.notekeeper",
+      "package": "edu.aish.efgalumni",
       "permissions": [
-        "RECORD_AUDIO",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
-      [
-        "expo-av",
-        {
-          "microphonePermission": "Allow NoteKeeper to access your microphone to record notes."
-        }
-      ],
       "expo-notifications",
-      "expo-asset",
-      "@react-native-google-signin/google-signin"
+      "expo-asset"
     ],
-    "extra": {
-      "eas": {
-        "projectId": "40dc4050-e0d8-4160-b4be-ef6e85359979"
-      }
+    "web": {
+      "bundler": "metro",
+      "output": "single"
     }
   }
 }
