@@ -15,7 +15,9 @@
     // Google sign-in return, which comes back to a URL Cloudflare has no file
     // for -- without this it looks like sign-in is broken.
     //
-    // Does the same job as public/_redirects, which Pages would have used.
+    // This replaces public/_redirects entirely. That file had to go: Workers'
+    // asset handling already strips `.html` and `/index`, so a `/* -> /index.html`
+    // rule is rejected as an infinite loop and the whole deploy fails.
     "not_found_handling": "single-page-application"
   }
 }

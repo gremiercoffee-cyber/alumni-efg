@@ -1,4 +1,0 @@
-# Single-page app: every path must serve index.html rather than 404.
-# Matters for the OAuth return, which comes back to a URL with a fragment,
-# and for any real routes added later.
-/*  /index.html  200

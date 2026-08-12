@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Badge, Prose, Section } from '../components/ui';
 import type { AlumniRecord } from '../lib/alumni';
 import { reachByEmail, reachByPhone } from '../lib/contact';
