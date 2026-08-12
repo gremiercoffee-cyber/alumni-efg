@@ -15,13 +15,15 @@ export type SimchaType =
   | 'grandchild_birth' | 'other';
 
 /**
- * Reads as "<name><label>". Possessive labels open with an apostrophe.
+ * How a simcha reads, given whether its date has passed.
  *
- * wedding_scheduled is here for the admin queue, not the feed -- the `feed` view
- * filters those out. A date being set is bookkeeping, and showing it would double
- * every wedding into two near-identical entries.
+ * A wedding row carries the wedding date, which is usually in the future when
+ * it is first recorded -- so the tense has to follow the date. Saying "got
+ * married" about a wedding four days from now is simply wrong, and it was.
+ *
+ * Engagements and births are announced after the fact, so they are always past.
  */
-export const SIMCHA_LABEL: Record<string, string> = {
+const PAST: Record<string, string> = {
   engagement: ' got engaged',
   wedding_scheduled: "'s wedding date is set",
   wedding: ' got married',
@@ -35,6 +37,30 @@ export const SIMCHA_LABEL: Record<string, string> = {
   shabbaton: '',
   dinner: '',
 };
+
+/** Only the ones whose date can legitimately be ahead of us. */
+const FUTURE: Record<string, string> = {
+  wedding: ' is getting married',
+  child_wedding: "'s child is getting married",
+  other: ' has a simcha coming up',
+};
+
+/**
+ * `days` is the offset from today: negative is past, 0 is today, positive is
+ * ahead. Callers with no date should pass a negative number.
+ */
+export function labelFor(subtype: string, days: number): string {
+  if (days > 0 && FUTURE[subtype]) return FUTURE[subtype];
+  if (days === 0 && subtype === 'wedding') return ' is getting married today';
+  if (days === 0 && subtype === 'child_wedding') return "'s child is getting married today";
+  return PAST[subtype] ?? '';
+}
+
+/**
+ * Past-tense forms, for places with no date in hand -- the admin queue, mostly.
+ * Prefer labelFor wherever a date is available.
+ */
+export const SIMCHA_LABEL: Record<string, string> = PAST;
 
 /**
  * A distinct glyph and colour per simcha, so the type reads before the words do.

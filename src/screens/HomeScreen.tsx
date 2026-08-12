@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { SectionList, StyleSheet, Text, View } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { Directory } from '../lib/alumni';
-import { SIMCHA_LABEL, visualFor, type FeedItem } from '../lib/simchas';
+import { labelFor, visualFor, type FeedItem } from '../lib/simchas';
 import { colors, radius, space, type } from '../theme';
 import { Chip, ChipRow, Empty } from '../components/ui';
 
@@ -27,23 +27,30 @@ function startOfDay(d: Date) {
   return c;
 }
 
-/** Which bucket a date falls in, and how the buckets order against each other. */
-function bucketOf(when: Date, today: Date): { key: string; title: string; rank: number } {
+/**
+ * Which bucket a date falls in. Buckets are ordered by date, full stop -- the
+ * whole feed is one chronological run, oldest at the top, so scrolling up goes
+ * back in time and scrolling down goes forward. The list opens at today.
+ *
+ * Titles are relative near the present and calendar months further out, because
+ * those are the units that mean something at either end: nobody thinks of next
+ * Tuesday as "August 2026", or of last spring as "203 days ago".
+ */
+function bucketOf(when: Date, today: Date): { key: string; title: string } {
   const days = Math.round((startOfDay(when).getTime() - today.getTime()) / MS_DAY);
   const sameMonth =
     when.getFullYear() === today.getFullYear() && when.getMonth() === today.getMonth();
   const monthLabel = when.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
-  if (days === 0) return { key: 'today', title: 'Today', rank: 0 };
+  if (days === 0) return { key: 'today', title: 'Today' };
   if (days > 0) {
-    if (days <= 7) return { key: 'week', title: 'This week', rank: 1 };
-    if (sameMonth) return { key: 'month', title: 'Later this month', rank: 2 };
-    // Fractional rank keeps September ahead of October without a second sort.
-    return { key: `f-${monthLabel}`, title: monthLabel, rank: 3 + days / 100000 };
+    if (days <= 7) return { key: 'week', title: 'This week' };
+    if (sameMonth) return { key: 'month', title: 'Later this month' };
+    return { key: `f-${monthLabel}`, title: monthLabel };
   }
-  if (days >= -7) return { key: 'p-week', title: 'Earlier this week', rank: 1000 };
-  if (sameMonth) return { key: 'p-month', title: 'Earlier this month', rank: 1001 };
-  return { key: `p-${monthLabel}`, title: monthLabel, rank: 1002 - days / 100000 };
+  if (days >= -7) return { key: 'p-week', title: 'Earlier this week' };
+  if (sameMonth) return { key: 'p-month', title: 'Earlier this month' };
+  return { key: `p-${monthLabel}`, title: monthLabel };
 }
 
 export default function HomeScreen({
@@ -75,26 +82,47 @@ export default function HomeScreen({
       return true;
     });
 
-    const buckets = new Map<string, { title: string; rank: number; data: FeedItem[] }>();
+    const buckets = new Map<string, { title: string; data: FeedItem[] }>();
     for (const item of shown) {
       const b = bucketOf(new Date(`${item.on_date}T00:00:00`), today);
       const existing = buckets.get(b.key);
       if (existing) existing.data.push(item);
-      else buckets.set(b.key, { title: b.title, rank: b.rank, data: [item] });
+      else buckets.set(b.key, { title: b.title, data: [item] });
     }
 
-    return [...buckets.values()]
-      .sort((a, b) => a.rank - b.rank)
-      .map((b) => ({
-        title: b.title,
-        // Upcoming reads soonest first; past reads most recent first.
-        data: b.data.sort((x, y) =>
-          b.rank < 1000
-            ? (x.on_date ?? '').localeCompare(y.on_date ?? '')
-            : (y.on_date ?? '').localeCompare(x.on_date ?? ''),
-        ),
-      }));
+    // Everything ascending, within buckets and between them. One timeline.
+    for (const b of buckets.values()) {
+      b.data.sort((x, y) => (x.on_date ?? '').localeCompare(y.on_date ?? ''));
+    }
+    return [...buckets.values()].sort((a, b) =>
+      (a.data[0].on_date ?? '').localeCompare(b.data[0].on_date ?? ''),
+    );
   }, [feed, directory, mineOnly, year, today]);
+
+  /** First section at or after today -- where the list should open. */
+  const todayIndex = useMemo(() => {
+    const iso = today.toISOString().slice(0, 10);
+    const i = sections.findIndex((s) => (s.data[0].on_date ?? '') >= iso);
+    return i === -1 ? Math.max(sections.length - 1, 0) : i;
+  }, [sections, today]);
+
+  const listRef = useRef<SectionList<FeedItem, Section>>(null);
+
+  // Open on today rather than two years ago. Deferred a frame: SectionList
+  // cannot scroll to a section it has not laid out yet, and onScrollToIndexFailed
+  // catches the case where it still has not.
+  useEffect(() => {
+    if (!sections.length) return;
+    const t = setTimeout(() => {
+      listRef.current?.scrollToLocation({
+        sectionIndex: todayIndex,
+        itemIndex: 0,
+        viewPosition: 0,
+        animated: false,
+      });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [sections.length, todayIndex]);
 
   // Enrollments came out: it counted rows, not people, so it said nothing
   // anyone wants to know. Its slot is for current students.
@@ -128,8 +156,20 @@ export default function HomeScreen({
       </ChipRow>
 
       <SectionList
+        ref={listRef}
         sections={sections}
         keyExtractor={(item) => `${item.kind}-${item.id}`}
+        onScrollToIndexFailed={() => {
+          // Retry once the rows it skipped over have been measured.
+          setTimeout(() => {
+            listRef.current?.scrollToLocation({
+              sectionIndex: todayIndex,
+              itemIndex: 0,
+              viewPosition: 0,
+              animated: false,
+            });
+          }, 120);
+        }}
         stickySectionHeadersEnabled
         renderSectionHeader={({ section }) => (
           <Text style={styles.sectionHead}>{section.title.toUpperCase()}</Text>
@@ -142,13 +182,12 @@ export default function HomeScreen({
               : 'Nothing here yet. Report a simcha and it will show up.'}
           </Empty>
         }
-        ListFooterComponent={
+        ListHeaderComponent={
           sections.length ? (
-            <Text style={styles.end}>
-              That&apos;s two years. Anything older isn&apos;t shown.
-            </Text>
+            <Text style={styles.edge}>Two years back. Scroll down for what&apos;s coming.</Text>
           ) : null
         }
+        ListFooterComponent={sections.length ? <Text style={styles.edge}>Nothing further ahead.</Text> : null}
         initialNumToRender={12}
         windowSize={9}
       />
@@ -161,10 +200,11 @@ function Row({ item, today }: { item: FeedItem; today: Date }) {
   const days = Math.round((startOfDay(when).getTime() - today.getTime()) / MS_DAY);
   const { icon, tint } = visualFor(item.subtype);
 
+  // Tense follows the date: a wedding next week has not happened yet.
   const title =
     item.kind === 'event'
       ? item.subject_name
-      : `${item.subject_name ?? ''}${SIMCHA_LABEL[item.subtype] ?? ''}`;
+      : `${item.subject_name ?? ''}${labelFor(item.subtype, days)}`;
 
   const relative =
     days === 0
@@ -254,7 +294,7 @@ const styles = StyleSheet.create({
 
   icon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
 
-  end: {
+  edge: {
     textAlign: 'center',
     padding: space.lg,
     fontFamily: 'Poppins_400Regular',

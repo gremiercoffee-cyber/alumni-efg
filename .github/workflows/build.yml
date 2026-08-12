@@ -1,10 +1,9 @@
 name: Build Android APK
 
+# Manual only. The APK is built locally now, and a push that also kicked off a
+# CI build would publish a second, competing release for the same commit.
+# Cloudflare still deploys the website on every push -- that is separate.
 on:
-  push:
-    branches:
-      - main
-      - alumni-app
   workflow_dispatch:
 
 # Several pushes in a row would otherwise queue a nine-minute build each, and
