@@ -1,0 +1,21 @@
+{
+  // Deploys the web build as a static site on Workers.
+  //
+  // Cloudflare now routes everyone through Workers rather than Pages, and a
+  // Worker needs to be told what to serve. `assets` does that: no Worker script
+  // runs, it just serves ./dist.
+  "name": "efg-alumni",
+  "compatibility_date": "2025-06-01",
+
+  "assets": {
+    "directory": "./dist",
+
+    // The app is a single page with no server routes, so any path that is not a
+    // real file must serve index.html rather than 404. This matters most for the
+    // Google sign-in return, which comes back to a URL Cloudflare has no file
+    // for -- without this it looks like sign-in is broken.
+    //
+    // Does the same job as public/_redirects, which Pages would have used.
+    "not_found_handling": "single-page-application"
+  }
+}
