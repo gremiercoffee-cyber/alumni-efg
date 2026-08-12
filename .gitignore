@@ -21,3 +21,8 @@ __pycache__/
 *.pyc
 android/
 ios/
+
+# Built APKs. They belong in Releases, not in git -- a 61MB blob per build
+# would bloat every clone forever.
+*.apk
+*.aab
