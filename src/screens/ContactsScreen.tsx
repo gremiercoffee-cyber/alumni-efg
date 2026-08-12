@@ -78,24 +78,27 @@ export default function ContactsScreen({
 
       <ChipRow label="REBBE" sub>
         <Chip
-          label="Any"
-          active={!filters.claim}
-          onPress={() => onFilters({ ...filters, claim: null })}
+          label="Any rebbe"
+          active={!filters.rebbe}
+          onPress={() => onFilters({ ...filters, rebbe: null })}
         />
         <Chip
-          label="Unclaimed"
-          active={filters.claim === 'unclaimed'}
+          label="No rebbe"
+          active={filters.rebbe === 'unclaimed'}
           onPress={() =>
-            onFilters({ ...filters, claim: filters.claim === 'unclaimed' ? null : 'unclaimed' })
+            onFilters({ ...filters, rebbe: filters.rebbe === 'unclaimed' ? null : 'unclaimed' })
           }
         />
-        <Chip
-          label="Rebbe & close"
-          active={filters.claim === 'mutual'}
-          onPress={() =>
-            onFilters({ ...filters, claim: filters.claim === 'mutual' ? null : 'mutual' })
-          }
-        />
+        {(directory?.rebbeimWithPeople ?? []).map((name) => (
+          <Chip
+            key={name}
+            label={name}
+            active={filters.rebbe === name}
+            onPress={() =>
+              onFilters({ ...filters, rebbe: filters.rebbe === name ? null : name })
+            }
+          />
+        ))}
       </ChipRow>
 
       <Text style={styles.count}>

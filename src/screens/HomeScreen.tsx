@@ -49,10 +49,11 @@ export default function HomeScreen({
   const past = shown.filter((f) => days(f.on_date) < 0)
     .sort((a, b) => (b.on_date ?? '').localeCompare(a.on_date ?? ''));
 
+  // Enrollments came out: it counts rows, not people, so it says nothing anyone
+  // wants to know. Its slot is for current students, once that data exists.
   const stats = directory
     ? [
         [directory.people.length, 'Alumni'],
-        [directory.people.reduce((n, p) => n + p.enrolments.length, 0), 'Enrollments'],
         [directory.people.filter((p) => p.years.length > 1).length, 'Stayed 2+ yrs'],
       ]
     : [];

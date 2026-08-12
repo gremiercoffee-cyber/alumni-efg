@@ -43,6 +43,7 @@ export type Directory = {
   years: string[];
   levelsByYear: Map<string, string[]>;
   staff: { id: number; name: string }[];
+  rebbeimWithPeople: string[];
 };
 
 const groupBy = <T extends { person_id: number }>(rows: T[] | null) => {
@@ -154,12 +155,21 @@ export async function loadDirectory(myStaffId: number | null): Promise<Directory
   );
   for (const r of records) (r as AlumniRecord & { mine: boolean }).mine = myPeople.has(r.id);
 
+  const withPeople = new Set(
+    records.flatMap((r) => [...r.claimedBy, ...r.programRebbeim.map((x) => x.rebbe)]),
+  );
+
   return {
     people: records,
     byId: new Map(records.map((r) => [r.id, r])),
     years: [...yearSet].sort().reverse(),
     levelsByYear: new Map([...levelsByYear].map(([y, s]) => [y, [...s].sort()])),
     staff: staff.data ?? [],
+    // Only rebbeim who have somebody. Offering a name that returns nothing
+    // reads as a broken filter rather than an empty one.
+    rebbeimWithPeople: (staff.data ?? [])
+      .filter((s) => withPeople.has(s.name))
+      .map((s) => s.name),
   };
 }
 
@@ -167,7 +177,14 @@ export type Filters = {
   query: string;
   year: string | null;
   level: string | null;
-  claim: 'unclaimed' | 'mutual' | null;
+  /**
+   * A rebbe's name, or 'unclaimed' for men nobody has claimed.
+   *
+   * Replaces an earlier 'mutual' option, which matched men whose programme
+   * rebbe also marked them as close. That was an observation about the data,
+   * not a question anyone asks -- "show me Rabbi Caller's guys" is.
+   */
+  rebbe: string | null;
   mineOnly: boolean;
 };
 
@@ -175,7 +192,7 @@ export const emptyFilters: Filters = {
   query: '',
   year: null,
   level: null,
-  claim: null,
+  rebbe: null,
   mineOnly: false,
 };
 
@@ -192,8 +209,15 @@ export function applyFilters(people: AlumniRecord[], f: Filters): AlumniRecord[]
     } else if (f.year && !p.years.includes(f.year)) return false;
     else if (f.level && !p.levels.includes(f.level)) return false;
 
-    if (f.claim === 'unclaimed' && p.claimedBy.length) return false;
-    if (f.claim === 'mutual' && !p.mutual.length) return false;
+    if (f.rebbe === 'unclaimed') {
+      if (p.claimedBy.length || p.programRebbeim.length) return false;
+    } else if (f.rebbe) {
+      // Either source counts: the rebbe he learned under, or a rebbe who has
+      // since said he is close with him.
+      const named = f.rebbe;
+      if (!p.claimedBy.includes(named) && !p.programRebbeim.some((r) => r.rebbe === named))
+        return false;
+    }
 
     return terms.every((t) => p.haystack.includes(t));
   });
