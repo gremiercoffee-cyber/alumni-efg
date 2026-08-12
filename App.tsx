@@ -142,7 +142,7 @@ export default function App() {
       case 'report':
         return <ReportScreen directory={directory} isAdmin={!!isAdmin} onDone={refresh} />;
       case 'admin':
-        return <AdminScreen onChanged={refresh} />;
+        return <AdminScreen directory={directory} onChanged={refresh} />;
       default:
         return (
           <ContactsScreen
