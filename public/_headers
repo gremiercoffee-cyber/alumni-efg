@@ -1,0 +1,7 @@
+# The JS bundle is content-hashed, so it can be cached hard.
+/_expo/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# index.html must not be, or a deploy never reaches anyone still holding the old one.
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
