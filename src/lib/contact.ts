@@ -17,7 +17,15 @@ import { supabase } from './supabase';
  * trusting them. Returns null when it cannot be confident, and the caller falls
  * back to a plain dial.
  */
+/** Does this look like a phone number at all, or is it something else? */
+export function isDialable(raw: string | null): boolean {
+  if (!raw) return false;
+  if (/[A-Za-z]{3,}/.test(raw)) return false;          // '169 Baker Avenue'
+  return raw.replace(/\D/g, '').length >= 7;
+}
+
 export function whatsappNumber(raw: string | null, country: string | null): string | null {
+  if (!isDialable(raw)) return null;
   if (!raw) return null;
 
   // A few records hold two numbers separated by a slash. Take the first.
@@ -82,10 +90,17 @@ async function open(url: string): Promise<boolean> {
     }
   }
 
+  // Deliberately no canOpenURL check.
+  //
+  // Since Android 11, an app can only see other apps it has declared in a
+  // <queries> block, and Expo's generated manifest declares none -- so
+  // canOpenURL answered false for wa.me, tel: and mailto: alike and every
+  // button did nothing. On the web there is no such restriction, which is why
+  // the links worked there and not in the APK.
+  //
+  // Just try it. A failure throws, which is a truthful signal; a false negative
+  // from canOpenURL is not.
   try {
-    // On native a false answer from canOpenURL means the app genuinely is not
-    // installed, which is what makes the WhatsApp-to-phone fallback work.
-    if (!(await Linking.canOpenURL(url))) return false;
     await Linking.openURL(url);
     return true;
   } catch {
@@ -114,6 +129,15 @@ function blocked(p: Reachable): boolean {
 export async function reachByPhone(p: Reachable, onLogged?: () => void) {
   if (blocked(p)) return;
   if (!p.phone) return;
+
+  if (!isDialable(p.phone)) {
+    Alert.alert(
+      'Not a phone number',
+      `His phone field reads "${p.phone}". That is not something this can dial -- ` +
+        'it looks like it belongs in another field.',
+    );
+    return;
+  }
 
   const wa = whatsappNumber(p.phone, p.country);
   const opened = wa ? await open(`https://wa.me/${wa}`) : false;
