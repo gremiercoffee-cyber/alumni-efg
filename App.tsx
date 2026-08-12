@@ -136,6 +136,7 @@ export default function App() {
             year={feedYear}
             onMineOnly={setFeedMine}
             onYear={setFeedYear}
+            onContacted={refresh}
           />
         );
       case 'report':

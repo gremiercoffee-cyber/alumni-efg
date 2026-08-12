@@ -1,7 +1,10 @@
-import React, { useEffect, useMemo, useRef } from 'react';
-import { SectionList, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import type { Directory } from '../lib/alumni';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import type { AlumniRecord, Directory } from '../lib/alumni';
+import { reachByEmail, reachByPhone } from '../lib/contact';
 import { labelFor, visualFor, type FeedItem } from '../lib/simchas';
 import { colors, radius, space, type } from '../theme';
 import { Chip, ChipRow, Empty } from '../components/ui';
@@ -9,17 +12,22 @@ import { Chip, ChipRow, Empty } from '../components/ui';
 /**
  * The simcha feed, two years back, laid out as a diary.
  *
- * The date is the anchor rather than an afterthought: what you scan a feed of
- * dated events for is *when*.
+ * One ascending timeline: oldest at the top, newest at the bottom, opening at
+ * today. Scroll up for the past, down for what is coming.
  *
- * Sections are relative near the present and calendar months further out,
- * because those are the useful units at either end. Nobody thinks of next
- * Tuesday as "August 2026", and nobody thinks of last spring as "203 days ago".
+ * Built on a flat list with fixed row heights rather than a SectionList,
+ * because opening at today has to be exact. SectionList.scrollToLocation
+ * measures lazily and lands wherever it happens to have laid out -- which is
+ * why this opened on the 1st of June. getItemLayout removes the guesswork.
  */
 
-type Section = { title: string; data: FeedItem[] };
-
 const MS_DAY = 86400000;
+const ROW_H = 74;
+const HEADER_H = 42;
+
+type Entry =
+  | { kind: 'header'; key: string; title: string }
+  | { kind: 'row'; key: string; item: FeedItem; person: AlumniRecord | null };
 
 function startOfDay(d: Date) {
   const c = new Date(d);
@@ -28,13 +36,8 @@ function startOfDay(d: Date) {
 }
 
 /**
- * Which bucket a date falls in. Buckets are ordered by date, full stop -- the
- * whole feed is one chronological run, oldest at the top, so scrolling up goes
- * back in time and scrolling down goes forward. The list opens at today.
- *
- * Titles are relative near the present and calendar months further out, because
- * those are the units that mean something at either end: nobody thinks of next
- * Tuesday as "August 2026", or of last spring as "203 days ago".
+ * Titles are relative near the present and calendar months further out: nobody
+ * thinks of next Tuesday as "August 2026", or of last spring as "203 days ago".
  */
 function bucketOf(when: Date, today: Date): { key: string; title: string } {
   const days = Math.round((startOfDay(when).getTime() - today.getTime()) / MS_DAY);
@@ -60,6 +63,7 @@ export default function HomeScreen({
   year,
   onMineOnly,
   onYear,
+  onContacted,
 }: {
   feed: FeedItem[];
   directory: Directory | null;
@@ -67,65 +71,56 @@ export default function HomeScreen({
   year: string | null;
   onMineOnly: (v: boolean) => void;
   onYear: (v: string | null) => void;
+  onContacted: () => void;
 }) {
   const today = startOfDay(new Date());
+  const todayIso = today.toISOString().slice(0, 10);
 
-  const sections = useMemo<Section[]>(() => {
-    const shown = feed.filter((f) => {
-      if (!f.on_date) return false;
-      if (!directory) return true;
-      const p = f.person_id ? directory.byId.get(f.person_id) : null;
-      // A rebbe's own simcha has no programme year and belongs to nobody, so
-      // both filters drop it. Intended -- you asked for *your* alumni.
-      if (mineOnly && !(p as { mine?: boolean } | null)?.mine) return false;
-      if (year && !p?.years.includes(year)) return false;
-      return true;
-    });
+  const { entries, startIndex } = useMemo(() => {
+    const shown = feed
+      .filter((f) => {
+        if (!f.on_date) return false;
+        if (!directory) return true;
+        const p = f.person_id ? directory.byId.get(f.person_id) : null;
+        // A rebbe's own simcha has no programme year and belongs to nobody, so
+        // both filters drop it. Intended -- you asked for *your* alumni.
+        if (mineOnly && !(p as { mine?: boolean } | null)?.mine) return false;
+        if (year && !p?.years.includes(year)) return false;
+        return true;
+      })
+      .sort((a, b) => (a.on_date ?? '').localeCompare(b.on_date ?? ''));
 
-    const buckets = new Map<string, { title: string; data: FeedItem[] }>();
+    const out: Entry[] = [];
+    let lastBucket = '';
+    let firstFuture = -1;
+
     for (const item of shown) {
       const b = bucketOf(new Date(`${item.on_date}T00:00:00`), today);
-      const existing = buckets.get(b.key);
-      if (existing) existing.data.push(item);
-      else buckets.set(b.key, { title: b.title, data: [item] });
-    }
-
-    // Everything ascending, within buckets and between them. One timeline.
-    for (const b of buckets.values()) {
-      b.data.sort((x, y) => (x.on_date ?? '').localeCompare(y.on_date ?? ''));
-    }
-    return [...buckets.values()].sort((a, b) =>
-      (a.data[0].on_date ?? '').localeCompare(b.data[0].on_date ?? ''),
-    );
-  }, [feed, directory, mineOnly, year, today]);
-
-  /** First section at or after today -- where the list should open. */
-  const todayIndex = useMemo(() => {
-    const iso = today.toISOString().slice(0, 10);
-    const i = sections.findIndex((s) => (s.data[0].on_date ?? '') >= iso);
-    return i === -1 ? Math.max(sections.length - 1, 0) : i;
-  }, [sections, today]);
-
-  const listRef = useRef<SectionList<FeedItem, Section>>(null);
-
-  // Open on today rather than two years ago. Deferred a frame: SectionList
-  // cannot scroll to a section it has not laid out yet, and onScrollToIndexFailed
-  // catches the case where it still has not.
-  useEffect(() => {
-    if (!sections.length) return;
-    const t = setTimeout(() => {
-      listRef.current?.scrollToLocation({
-        sectionIndex: todayIndex,
-        itemIndex: 0,
-        viewPosition: 0,
-        animated: false,
+      if (b.key !== lastBucket) {
+        out.push({ kind: 'header', key: `h-${b.key}`, title: b.title });
+        lastBucket = b.key;
+        // Open on the *header* of today's group, so its label is on screen too.
+        if (firstFuture === -1 && (item.on_date ?? '') >= todayIso) {
+          firstFuture = out.length - 1;
+        }
+      }
+      out.push({
+        kind: 'row',
+        key: `${item.kind}-${item.id}`,
+        item,
+        person: item.person_id ? (directory?.byId.get(item.person_id) ?? null) : null,
       });
-    }, 60);
-    return () => clearTimeout(t);
-  }, [sections.length, todayIndex]);
+    }
 
-  // Enrollments came out: it counted rows, not people, so it said nothing
-  // anyone wants to know. Its slot is for current students.
+    return {
+      entries: out,
+      // Nothing upcoming: sit at the end, which is the most recent past.
+      startIndex: firstFuture === -1 ? Math.max(out.length - 1, 0) : firstFuture,
+    };
+  }, [feed, directory, mineOnly, year, today, todayIso]);
+
+  // Enrollments came out of the strip: it counted rows, not people.
+  // Its slot is for current students.
   const stats: [number, string][] = directory
     ? [
         [directory.people.length, 'Alumni'],
@@ -155,26 +150,31 @@ export default function HomeScreen({
         ))}
       </ChipRow>
 
-      <SectionList
-        ref={listRef}
-        sections={sections}
-        keyExtractor={(item) => `${item.kind}-${item.id}`}
-        onScrollToIndexFailed={() => {
-          // Retry once the rows it skipped over have been measured.
-          setTimeout(() => {
-            listRef.current?.scrollToLocation({
-              sectionIndex: todayIndex,
-              itemIndex: 0,
-              viewPosition: 0,
-              animated: false,
-            });
-          }, 120);
+      <FlatList
+        // Remounting on a filter change re-applies initialScrollIndex; without
+        // it the list keeps whatever offset the previous filter left behind.
+        key={`${mineOnly}-${year ?? 'all'}`}
+        data={entries}
+        keyExtractor={(e) => e.key}
+        initialScrollIndex={startIndex}
+        getItemLayout={(data, index) => {
+          let offset = 0;
+          for (let i = 0; i < index; i++) {
+            offset += data![i].kind === 'header' ? HEADER_H : ROW_H;
+          }
+          return {
+            length: data![index]?.kind === 'header' ? HEADER_H : ROW_H,
+            offset,
+            index,
+          };
         }}
-        stickySectionHeadersEnabled
-        renderSectionHeader={({ section }) => (
-          <Text style={styles.sectionHead}>{section.title.toUpperCase()}</Text>
-        )}
-        renderItem={({ item }) => <Row item={item} today={today} />}
+        renderItem={({ item }) =>
+          item.kind === 'header' ? (
+            <Text style={styles.sectionHead}>{item.title.toUpperCase()}</Text>
+          ) : (
+            <Row item={item.item} person={item.person} today={today} onContacted={onContacted} />
+          )
+        }
         ListEmptyComponent={
           <Empty>
             {feed.length
@@ -182,20 +182,28 @@ export default function HomeScreen({
               : 'Nothing here yet. Report a simcha and it will show up.'}
           </Empty>
         }
-        ListHeaderComponent={
-          sections.length ? (
-            <Text style={styles.edge}>Two years back. Scroll down for what&apos;s coming.</Text>
-          ) : null
+        ListHeaderComponent={entries.length ? <Text style={styles.edge}>Two years back.</Text> : null}
+        ListFooterComponent={
+          entries.length ? <Text style={styles.edge}>Nothing further ahead.</Text> : null
         }
-        ListFooterComponent={sections.length ? <Text style={styles.edge}>Nothing further ahead.</Text> : null}
-        initialNumToRender={12}
-        windowSize={9}
+        initialNumToRender={14}
+        windowSize={11}
       />
     </View>
   );
 }
 
-function Row({ item, today }: { item: FeedItem; today: Date }) {
+function Row({
+  item,
+  person,
+  today,
+  onContacted,
+}: {
+  item: FeedItem;
+  person: AlumniRecord | null;
+  today: Date;
+  onContacted: () => void;
+}) {
   const when = new Date(`${item.on_date}T00:00:00`);
   const days = Math.round((startOfDay(when).getTime() - today.getTime()) / MS_DAY);
   const { icon, tint } = visualFor(item.subtype);
@@ -217,6 +225,8 @@ function Row({ item, today }: { item: FeedItem; today: Date }) {
             ? 'yesterday'
             : `${-days} days ago`;
 
+  const dnc = person?.do_not_contact ?? false;
+
   return (
     <View style={styles.row}>
       <View style={[styles.dateBox, days === 0 && styles.dateBoxToday]}>
@@ -227,15 +237,39 @@ function Row({ item, today }: { item: FeedItem; today: Date }) {
       </View>
 
       <View style={styles.rowMain}>
-        <Text style={styles.rowTitle} numberOfLines={2}>
-          {title}
+        <View style={styles.titleLine}>
+          <MaterialCommunityIcons name={icon as never} size={14} color={tint} />
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
+        <Text style={styles.rowSub} numberOfLines={1}>
+          {[item.detail, relative].filter(Boolean).join(' · ')}
         </Text>
-        <Text style={styles.rowSub}>{[item.detail, relative].filter(Boolean).join(' · ')}</Text>
       </View>
 
-      <View style={[styles.icon, { backgroundColor: `${tint}22` }]}>
-        <MaterialCommunityIcons name={icon as never} size={18} color={tint} />
-      </View>
+      {/* Reach the man whose simcha it is without leaving the feed. Events and
+          rebbeim's own simchas have nobody to reach, so they get no buttons. */}
+      {person ? (
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={[styles.act, styles.actWa, (dnc || !person.phone) && styles.actOff]}
+            disabled={dnc || !person.phone}
+            onPress={() => reachByPhone(person, onContacted)}
+            accessibilityLabel={`Message ${person.name}`}
+          >
+            <FontAwesome name="whatsapp" size={17} color={colors.whatsapp} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.act, (dnc || !person.email) && styles.actOff]}
+            disabled={dnc || !person.email}
+            onPress={() => reachByEmail(person, onContacted)}
+            accessibilityLabel={`Email ${person.name}`}
+          >
+            <MaterialIcons name="mail-outline" size={16} color={colors.cyan} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -255,27 +289,28 @@ const styles = StyleSheet.create({
 
   sectionHead: {
     ...type.label,
+    height: HEADER_H,
+    lineHeight: HEADER_H - 14,
     color: colors.cyan,
     backgroundColor: colors.navy900,
     paddingHorizontal: space.md,
-    paddingTop: space.md,
-    paddingBottom: space.sm,
+    paddingTop: 14,
     borderBottomWidth: 1,
     borderBottomColor: colors.ruleOnNavy,
   },
 
   row: {
+    height: ROW_H,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm + 6,
+    gap: space.sm + 4,
     paddingHorizontal: space.md,
-    paddingVertical: 11,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(27,58,114,0.45)',
   },
   dateBox: {
-    width: 48,
-    paddingVertical: 6,
+    width: 46,
+    paddingVertical: 5,
     borderRadius: radius.md,
     backgroundColor: colors.navy800,
     borderWidth: 1,
@@ -283,16 +318,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dateBoxToday: { backgroundColor: colors.cyan, borderColor: colors.cyan },
-  dateDay: { fontFamily: 'Poppins_700Bold', fontSize: 19, color: colors.white, lineHeight: 22 },
-  dateMonth: { ...type.label, fontSize: 9, color: colors.muted, opacity: 0.85 },
+  dateDay: { fontFamily: 'Poppins_700Bold', fontSize: 18, color: colors.white, lineHeight: 21 },
+  dateMonth: { ...type.label, fontSize: 8.5, color: colors.muted, opacity: 0.85 },
   dateTodayText: { color: colors.navy900 },
   dateTodayMonth: { color: colors.navy900, opacity: 0.7 },
 
-  rowMain: { flex: 1, minWidth: 0 },
-  rowTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 14.5, color: colors.white },
-  rowSub: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: colors.muted, opacity: 0.8 },
+  rowMain: { flex: 1, minWidth: 0, gap: 2 },
+  titleLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rowTitle: { flex: 1, fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: colors.white },
+  rowSub: { fontFamily: 'Poppins_400Regular', fontSize: 11.5, color: colors.muted, opacity: 0.8 },
 
-  icon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  actions: { flexDirection: 'row', gap: 5 },
+  act: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.ruleOnNavy,
+    backgroundColor: colors.navy800,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actWa: { backgroundColor: 'rgba(37,211,102,0.14)' },
+  actOff: { opacity: 0.25 },
 
   edge: {
     textAlign: 'center',
