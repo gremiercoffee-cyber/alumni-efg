@@ -7,6 +7,12 @@ on:
       - alumni-app
   workflow_dispatch:
 
+# Several pushes in a row would otherwise queue a nine-minute build each, and
+# only the last one matters. Supersede rather than pile up.
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
