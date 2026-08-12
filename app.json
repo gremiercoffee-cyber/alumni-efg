@@ -18,7 +18,8 @@
     },
     "plugins": [
       "expo-notifications",
-      "expo-asset"
+      "expo-asset",
+      "./plugins/withAbiFilters"
     ],
     "web": {
       "bundler": "metro",
