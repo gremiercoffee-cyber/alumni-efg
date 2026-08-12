@@ -61,10 +61,31 @@ async function logInteraction(personId: number, channel: ReachChannel) {
 }
 
 async function open(url: string): Promise<boolean> {
+  // The web needs its own path. react-native-web routes Linking.openURL through
+  // window.open, which a popup blocker will refuse for anything not obviously
+  // driven by a click -- and it refuses silently, so the button simply does
+  // nothing. Navigating the current tab is never blocked, which is what mailto:
+  // and tel: want anyway; only wa.me is worth a new tab, and there we fall back
+  // to navigating if the popup is refused.
+  if (Platform.OS === 'web') {
+    if (typeof window === 'undefined') return false;
+    try {
+      if (url.startsWith('http')) {
+        const w = window.open(url, '_blank', 'noopener,noreferrer');
+        if (!w) window.location.assign(url);
+      } else {
+        window.location.assign(url);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   try {
-    // canOpenURL is unreliable on web and for custom schemes, so on web we just
-    // try it; on native a false answer means the app genuinely is not installed.
-    if (Platform.OS !== 'web' && !(await Linking.canOpenURL(url))) return false;
+    // On native a false answer from canOpenURL means the app genuinely is not
+    // installed, which is what makes the WhatsApp-to-phone fallback work.
+    if (!(await Linking.canOpenURL(url))) return false;
     await Linking.openURL(url);
     return true;
   } catch {
@@ -98,14 +119,19 @@ export async function reachByPhone(p: Reachable, onLogged?: () => void) {
   const opened = wa ? await open(`https://wa.me/${wa}`) : false;
 
   if (opened) {
-    await logInteraction(p.id, 'whatsapp');
+    void logInteraction(p.id, 'whatsapp');
   } else {
     const dialled = await open(`tel:${p.phone.split('/')[0].replace(/\s/g, '')}`);
     if (!dialled) {
-      Alert.alert('Could not open', p.phone);
+      Alert.alert(
+        'Could not open',
+        wa
+          ? `WhatsApp did not open for ${p.phone}.`
+          : `${p.phone} is not a number this can dial. Copy it by hand.`,
+      );
       return;
     }
-    await logInteraction(p.id, 'call');
+    void logInteraction(p.id, 'call');
   }
   onLogged?.();
 }
@@ -117,7 +143,7 @@ export async function reachByEmail(p: Reachable, onLogged?: () => void) {
     Alert.alert('Could not open', p.email);
     return;
   }
-  await logInteraction(p.id, 'email');
+  void logInteraction(p.id, 'email');
   onLogged?.();
 }
 
