@@ -36,20 +36,25 @@ export const SIMCHA_LABEL: Record<string, string> = {
   dinner: '',
 };
 
-export const SIMCHA_ICON: Record<string, string> = {
-  engagement: '\u{1F48D}',
-  wedding_scheduled: '\u{1F4C5}',
-  wedding: '\u{1F389}',
-  birth: '\u{1F476}',
-  bar_mitzvah: '\u{1F4D6}',
-  child_engagement: '\u{1F48D}',
-  child_wedding_scheduled: '\u{1F4C5}',
-  child_wedding: '\u{1F389}',
-  grandchild_birth: '\u{1F476}',
-  other: '\u{2728}',
-  shabbaton: '\u{1F56F}',
-  dinner: '\u{1F37D}',
+/**
+ * A distinct glyph and colour per simcha, so the type reads before the words do.
+ * MaterialCommunityIcons names, drawn from the font Expo already ships.
+ */
+export const SIMCHA_VISUAL: Record<string, { icon: string; tint: string }> = {
+  engagement: { icon: 'ring', tint: '#ff9ac4' },
+  wedding: { icon: 'party-popper', tint: '#2fe0d2' },
+  birth: { icon: 'baby-carriage', tint: '#ffd166' },
+  bar_mitzvah: { icon: 'book-open-variant', tint: '#a99bff' },
+  child_engagement: { icon: 'ring', tint: '#ff9ac4' },
+  child_wedding: { icon: 'party-popper', tint: '#2fe0d2' },
+  grandchild_birth: { icon: 'baby-face-outline', tint: '#ffd166' },
+  other: { icon: 'star-four-points', tint: '#b9cbee' },
+  shabbaton: { icon: 'calendar-star', tint: '#6fa8ff' },
+  dinner: { icon: 'silverware-fork-knife', tint: '#6fa8ff' },
 };
+
+export const visualFor = (subtype: string) =>
+  SIMCHA_VISUAL[subtype] ?? { icon: 'calendar', tint: '#b9cbee' };
 
 export const ALUMNUS_TYPES: [SimchaType, string][] = [
   ['engagement', 'Got engaged'],
