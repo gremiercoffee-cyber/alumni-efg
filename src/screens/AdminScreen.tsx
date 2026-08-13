@@ -31,7 +31,7 @@ import { colors, radius, space, type } from '../theme';
  */
 
 type QueueRow = {
-  kind: 'claim' | 'awaiting_date' | 'upcoming' | 'announce';
+  kind: 'awaiting_date' | 'needs_bed' | 'upcoming' | 'announce';
   id: number;
   subtype: string;
   since: string;
@@ -44,7 +44,7 @@ type QueueRow = {
 };
 
 const GROUPS: [QueueRow['kind'], string, string][] = [
-  ['claim', 'NEEDS YOUR REVIEW', 'Reported by someone else. Nothing has been sent.'],
+  ['needs_bed', 'NEEDS A BED', 'Staying in the yeshiva with nowhere to sleep yet.'],
   ['awaiting_date', 'SET A WEDDING DATE', 'Engaged, but nobody has recorded when the wedding is.'],
   ['upcoming', 'COMING UP', 'Dated and waiting. The Mazal Tov goes out on the day.'],
   ['announce', 'SEND THE MAZAL TOV', 'Happened, and the announcement has not gone out.'],
@@ -98,30 +98,11 @@ export default function AdminScreen({
   const personFor = (row: QueueRow) =>
     row.person_id ? (directory?.byId.get(row.person_id) ?? null) : null;
 
-  async function review(row: QueueRow, approve: boolean) {
+  async function sortBed(row: QueueRow) {
     setBusyId(`${row.kind}-${row.id}`);
     try {
-      const { data: me } = await supabase.auth.getUser();
-      if (approve) {
-        // Approving is what creates the real record, and creating the simcha is
-        // what fires the outbound notifications.
-        const { error: insErr } = await supabase.from('simchas').insert({
-          person_id: row.person_id,
-          staff_id: row.staff_id,
-          type: row.subtype as never,
-          occurred_on: row.on_date ?? new Date().toISOString().slice(0, 10),
-          created_by: me.user?.id ?? null,
-        });
-        if (insErr) throw insErr;
-      }
-      const { error } = await supabase
-        .from('claims')
-        .update({
-          status: approve ? 'approved' : 'rejected',
-          reviewed_by: me.user?.id ?? null,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq('id', row.id);
+      // The queue row's id is the visit, not the person.
+      const { error } = await supabase.from('visits').update({ has_bed: true }).eq('id', row.id);
       if (error) throw error;
       await load();
       onChanged();
@@ -232,7 +213,9 @@ export default function AdminScreen({
                   <View style={styles.cardHead}>
                     <Text style={styles.subject}>{row.subject_name}</Text>
                     <Text style={styles.when}>
-                      {kind === 'awaiting_date'
+                      {kind === 'needs_bed'
+                        ? `arrives ${whenText(daysTo(row.on_date))}`
+                        : kind === 'awaiting_date'
                         ? `engaged ${row.report_count} days ago`
                         : row.on_date
                           ? whenText(daysTo(row.on_date))
@@ -242,7 +225,9 @@ export default function AdminScreen({
                   {/* Tense follows the date. This said "got married" about a
                       wedding still months away. */}
                   <Text style={styles.what}>
-                    {labelFor(row.subtype, daysTo(row.on_date)).trim().replace(/^'s /, 'his ')}
+                    {kind === 'needs_bed'
+                      ? `staying ${row.report_count} night${row.report_count === 1 ? '' : 's'}`
+                      : labelFor(row.subtype, daysTo(row.on_date)).trim().replace(/^'s /, 'his ')}
                     {row.on_date
                       ? ` · ${new Date(`${row.on_date}T00:00:00`).toLocaleDateString(undefined, {
                           day: 'numeric',
@@ -252,7 +237,7 @@ export default function AdminScreen({
                       : ''}
                   </Text>
 
-                  {kind === 'claim' && row.report_count > 1 ? (
+                  {false ? (
                     <View style={styles.pills}>
                       <Badge tone="cyan">{`${row.report_count} people reported this`}</Badge>
                     </View>
@@ -283,27 +268,18 @@ export default function AdminScreen({
                   ) : null}
 
                   <View style={styles.actions}>
-                    {kind === 'claim' ? (
-                      <>
-                        <TouchableOpacity
-                          style={[styles.btn, styles.btnPrimary]}
-                          disabled={busy}
-                          onPress={() => review(row, true)}
-                        >
-                          {busy ? (
-                            <ActivityIndicator color={colors.navy900} size="small" />
-                          ) : (
-                            <Text style={styles.btnPrimaryText}>Approve &amp; post</Text>
-                          )}
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.btn}
-                          disabled={busy}
-                          onPress={() => review(row, false)}
-                        >
-                          <Text style={styles.btnText}>Reject</Text>
-                        </TouchableOpacity>
-                      </>
+                    {kind === 'needs_bed' ? (
+                      <TouchableOpacity
+                        style={[styles.btn, styles.btnPrimary]}
+                        disabled={busy}
+                        onPress={() => sortBed(row)}
+                      >
+                        {busy ? (
+                          <ActivityIndicator color={colors.navy900} size="small" />
+                        ) : (
+                          <Text style={styles.btnPrimaryText}>Bed sorted</Text>
+                        )}
+                      </TouchableOpacity>
                     ) : kind === 'upcoming' ? (
                       <TouchableOpacity
                         style={[styles.btn, styles.btnWa, (dnc || !person?.phone) && styles.btnOff]}

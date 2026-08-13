@@ -33,6 +33,8 @@ import FilerSheet from './src/screens/FilerSheet';
 import AdminDrawer, { ADMIN_TOOLS } from './src/screens/AdminDrawer';
 import PendingUsersScreen from './src/screens/PendingUsersScreen';
 import ProposedEditsScreen from './src/screens/ProposedEditsScreen';
+import ReportedScreen from './src/screens/ReportedScreen';
+import StaysScreen from './src/screens/StaysScreen';
 import { topInset } from './src/components/ui';
 import { colors, space, type } from './src/theme';
 
@@ -165,6 +167,12 @@ export default function App() {
     }
     if (tool === 'edits') {
       return <ProposedEditsScreen directory={directory} onChanged={refresh} />;
+    }
+    if (tool === 'reported') {
+      return <ReportedScreen directory={directory} onChanged={refresh} />;
+    }
+    if (tool === 'stays') {
+      return <StaysScreen onChanged={refresh} />;
     }
     if (selected && editing) {
       return (

@@ -16,6 +16,7 @@ import {
   NEEDS_DATE,
   REBBE_TYPES,
   isVisit,
+  needsSpan,
   reportSimcha,
   type SimchaType,
 } from '../lib/simchas';
@@ -41,6 +42,7 @@ export default function ReportScreen({
   const [staffId, setStaffId] = useState<number | null>(null);
   const [simchaType, setSimchaType] = useState<SimchaType | ''>('');
   const [date, setDate] = useState('');
+  const [until, setUntil] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +52,13 @@ export default function ReportScreen({
   const needsDate = simchaType
     ? NEEDS_DATE.includes(simchaType) || isVisit(simchaType)
     : false;
-  const ready = (personId || staffId) && simchaType && (!needsDate || /^\d{4}-\d{2}-\d{2}$/.test(date));
+  // A stay must say how long, or the bed calendar cannot place him on a night.
+  const span = simchaType ? needsSpan(simchaType) : false;
+  const ready =
+    (personId || staffId) &&
+    simchaType &&
+    (!needsDate || /^\d{4}-\d{2}-\d{2}$/.test(date)) &&
+    (!span || /^\d{4}-\d{2}-\d{2}$/.test(until));
 
   const personName = personId ? directory?.byId.get(personId)?.name ?? '' : '';
   const staffName = staffId ? directory?.staff.find((s) => s.id === staffId)?.name ?? '' : '';
@@ -67,6 +75,7 @@ export default function ReportScreen({
         staffId,
         type: simchaType,
         date: needsDate ? date : date || new Date().toISOString().slice(0, 10),
+        until: span ? until : null,
       });
       setResult(
         isVisit(simchaType)
@@ -75,7 +84,7 @@ export default function ReportScreen({
             ? `Posted. ${personName || staffName} — ${typeLabel.toLowerCase()}. Staff are being notified.`
             : `Filed for review. ${personName || staffName} — ${typeLabel.toLowerCase()}.`,
       );
-      setPersonId(null); setStaffId(null); setSimchaType(''); setDate('');
+      setPersonId(null); setStaffId(null); setSimchaType(''); setDate(''); setUntil('');
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not file that.');
@@ -124,7 +133,7 @@ export default function ReportScreen({
       {needsDate ? (
         <View style={styles.field}>
           <Text style={styles.label}>
-            {isVisit(simchaType as SimchaType) ? 'WHEN' : 'WEDDING DATE'}
+            {span ? 'FIRST NIGHT' : isVisit(simchaType as SimchaType) ? 'WHEN' : 'WEDDING DATE'}
           </Text>
           <TextInput
             style={styles.select}
@@ -139,6 +148,24 @@ export default function ReportScreen({
               ? 'A date ahead of today reads as a plan; one behind reads as a record.'
               : 'This is the piece that was always missing. Until it is known, no '
                 + 'reminder can be scheduled.'}
+          </Text>
+        </View>
+      ) : null}
+
+      {span ? (
+        <View style={styles.field}>
+          <Text style={styles.label}>LAST NIGHT</Text>
+          <TextInput
+            style={styles.select}
+            value={until}
+            onChangeText={setUntil}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="none"
+          />
+          <Text style={styles.hint}>
+            How long he is here for. Without it the bed calendar cannot say who is in
+            the building on any given night. Same date for a single night.
           </Text>
         </View>
       ) : null}

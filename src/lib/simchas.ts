@@ -129,6 +129,13 @@ export const NEEDS_DATE: SimchaType[] = ['wedding_scheduled', 'child_wedding_sch
 export const VISIT_TYPES: SimchaType[] = ['visit_israel', 'visit_came', 'visit_stayed'];
 export const isVisit = (t: string) => (VISIT_TYPES as string[]).includes(t);
 
+/**
+ * A stay has to say how long. Without it the bed calendar cannot answer
+ * "who is here on Tuesday", which is the whole point of tracking stays.
+ */
+export const NEEDS_SPAN: SimchaType[] = ['visit_stayed'];
+export const needsSpan = (t: string) => (NEEDS_SPAN as string[]).includes(t);
+
 export type FeedItem = {
   kind: string;
   id: number;
@@ -168,16 +175,23 @@ export async function reportSimcha(opts: {
   staffId: number | null;
   type: SimchaType;
   date: string | null;
+  until?: string | null;
   note?: string;
 }): Promise<{ committed: boolean }> {
-  const { isAdmin, personId, staffId, type, date, note } = opts;
+  const { isAdmin, personId, staffId, type, date, until, note } = opts;
 
   if (isVisit(type)) {
     if (!personId) throw new Error('a visit belongs to an alumnus');
     const on = date ?? new Date().toISOString().slice(0, 10);
+    const lastNight = type === 'visit_stayed' ? (until || on) : null;
+    if (type === 'visit_stayed' && lastNight && lastNight < on) {
+      throw new Error('the last night cannot be before he arrives');
+    }
+
     const { error } = await supabase.from('visits').insert({
       person_id: personId,
       visited_on: on,
+      until_date: lastNight,
       kind: type === 'visit_israel' ? 'israel' : 'yeshiva',
       overnight: type === 'visit_stayed',
       // Derived from the date rather than asked for separately: a date ahead of

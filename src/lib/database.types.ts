@@ -45,6 +45,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "claim_reports_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "reported_claims"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "claim_reports_reported_by_fkey"
             columns: ["reported_by"]
             isOneToOne: false
@@ -1048,8 +1055,10 @@ export type Database = {
       }
       visits: {
         Row: {
+          bed_note: string | null
           created_at: string
           expected: boolean
+          has_bed: boolean | null
           id: number
           kind: string
           nights: number | null
@@ -1057,11 +1066,14 @@ export type Database = {
           overnight: boolean
           person_id: number
           recorded_by: string | null
+          until_date: string | null
           visited_on: string
         }
         Insert: {
+          bed_note?: string | null
           created_at?: string
           expected?: boolean
+          has_bed?: boolean | null
           id?: number
           kind?: string
           nights?: number | null
@@ -1069,11 +1081,14 @@ export type Database = {
           overnight?: boolean
           person_id: number
           recorded_by?: string | null
+          until_date?: string | null
           visited_on: string
         }
         Update: {
+          bed_note?: string | null
           created_at?: string
           expected?: boolean
+          has_bed?: boolean | null
           id?: number
           kind?: string
           nights?: number | null
@@ -1081,6 +1096,7 @@ export type Database = {
           overnight?: boolean
           person_id?: number
           recorded_by?: string | null
+          until_date?: string | null
           visited_on?: string
         }
         Relationships: [
@@ -1241,6 +1257,98 @@ export type Database = {
           person_id: number | null
         }
         Relationships: []
+      }
+      reported_claims: {
+        Row: {
+          id: number | null
+          on_date: string | null
+          person_id: number | null
+          report_count: number | null
+          since: string | null
+          staff_id: number | null
+          status: string | null
+          subject_name: string | null
+          subtype: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claims_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "claims_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stay_nights: {
+        Row: {
+          arrives: string | null
+          bed_note: string | null
+          expected: boolean | null
+          has_bed: boolean | null
+          leaves: string | null
+          name: string | null
+          night: string | null
+          person_id: number | null
+          visit_id: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+        ]
+      }
+      stays_needing_beds: {
+        Row: {
+          arrives: string | null
+          days_until: number | null
+          leaves: string | null
+          name: string | null
+          nights_here: number | null
+          person_id: number | null
+          visit_id: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "visits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+        ]
       }
     }
     Functions: {

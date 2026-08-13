@@ -39,10 +39,24 @@ export type AdminTool = {
 
 export const ADMIN_TOOLS: AdminTool[] = [
   {
-    id: 'pending',
-    label: 'People waiting',
-    hint: 'Let someone in, and decide what they can do',
-    icon: 'account-clock-outline',
+    id: 'reported',
+    label: 'Reported by others',
+    hint: 'Simchas someone else has told you about',
+    icon: 'inbox-arrow-down-outline',
+    ready: true,
+  },
+  {
+    id: 'edits',
+    label: 'Proposed changes',
+    hint: 'Corrections other people have suggested',
+    icon: 'pencil-outline',
+    ready: true,
+  },
+  {
+    id: 'stays',
+    label: 'Staying in yeshiva',
+    hint: 'Who is here, for how long, and who still needs a bed',
+    icon: 'bed-outline',
     ready: true,
   },
   {
@@ -53,10 +67,10 @@ export const ADMIN_TOOLS: AdminTool[] = [
     ready: false,
   },
   {
-    id: 'edits',
-    label: 'Proposed changes',
-    hint: 'Corrections other people have suggested',
-    icon: 'pencil-outline',
+    id: 'pending',
+    label: 'People waiting',
+    hint: 'Let someone in, and decide what they can do',
+    icon: 'account-clock-outline',
     ready: true,
   },
 ];
