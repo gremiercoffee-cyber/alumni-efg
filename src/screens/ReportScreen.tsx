@@ -20,6 +20,7 @@ import {
   reportSimcha,
   type SimchaType,
 } from '../lib/simchas';
+import DateField from '../components/DatePicker';
 import { colors, radius, space, type } from '../theme';
 
 /**
@@ -135,14 +136,7 @@ export default function ReportScreen({
           <Text style={styles.label}>
             {span ? 'FIRST NIGHT' : isVisit(simchaType as SimchaType) ? 'WHEN' : 'WEDDING DATE'}
           </Text>
-          <TextInput
-            style={styles.select}
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.muted}
-            autoCapitalize="none"
-          />
+          <DateField value={date || null} onChange={setDate} />
           <Text style={styles.hint}>
             {isVisit(simchaType as SimchaType)
               ? 'A date ahead of today reads as a plan; one behind reads as a record.'
@@ -155,14 +149,7 @@ export default function ReportScreen({
       {span ? (
         <View style={styles.field}>
           <Text style={styles.label}>LAST NIGHT</Text>
-          <TextInput
-            style={styles.select}
-            value={until}
-            onChangeText={setUntil}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.muted}
-            autoCapitalize="none"
-          />
+          <DateField value={until || null} onChange={setUntil} />
           <Text style={styles.hint}>
             How long he is here for. Without it the bed calendar cannot say who is in
             the building on any given night. Same date for a single night.

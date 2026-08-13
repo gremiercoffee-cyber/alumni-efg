@@ -27,6 +27,7 @@ import {
   type RosterRow,
 } from '../lib/events';
 import { supabase } from '../lib/supabase';
+import DateField from '../components/DatePicker';
 import { colors, radius, space, type } from '../theme';
 
 /**
@@ -218,26 +219,20 @@ function NewEvent({
               </View>
             </Field>
 
-            <Field label="STARTS" hint="YYYY-MM-DD. The year is taken from this.">
-              <TextInput
-                style={styles.input}
-                value={startsOn}
-                onChangeText={setStartsOn}
-                placeholder="2026-11-13"
-                placeholderTextColor={colors.muted}
-                autoCapitalize="none"
-              />
+            <Field label="STARTS" hint="The year is taken from this.">
+              <View style={styles.inline}>
+                <DateField value={startsOn || null} onChange={setStartsOn} />
+              </View>
             </Field>
 
-            <Field label="ENDS" hint="Leave empty for a one-day event.">
-              <TextInput
-                style={styles.input}
-                value={endsOn}
-                onChangeText={setEndsOn}
-                placeholder="2026-11-15"
-                placeholderTextColor={colors.muted}
-                autoCapitalize="none"
-              />
+            <Field label="ENDS" hint="Leave it for a one-day event.">
+              <View style={styles.inline}>
+                <DateField
+                  value={endsOn || null}
+                  onChange={setEndsOn}
+                  placeholder="Same day"
+                />
+              </View>
             </Field>
 
             <Field label="WHERE">
@@ -724,6 +719,7 @@ const styles = StyleSheet.create({
     marginHorizontal: space.md,
   },
   multiline: { minHeight: 84, textAlignVertical: 'top' },
+  inline: { marginHorizontal: space.md },
   chips: { flexDirection: 'row', gap: 7, flexWrap: 'wrap' },
   chip: {
     borderRadius: 999,

@@ -17,6 +17,7 @@ import { announcementFor } from '../lib/announce';
 import { announcementLink, reachByPhone } from '../lib/contact';
 import { labelFor } from '../lib/simchas';
 import { supabase } from '../lib/supabase';
+import DateField from '../components/DatePicker';
 import { colors, radius, space, type } from '../theme';
 
 /**
@@ -115,7 +116,7 @@ export default function AdminScreen({
   async function saveWeddingDate(row: QueueRow) {
     const date = dateDraft[row.id]?.trim() ?? '';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      Alert.alert('Needs a full date', 'Write it as YYYY-MM-DD, for example 2026-11-24.');
+      Alert.alert('Pick a date first', 'Tap the date field and choose the day.');
       return;
     }
     setBusyId(`${row.kind}-${row.id}`);
@@ -123,7 +124,9 @@ export default function AdminScreen({
       const { error } = await supabase.from('simchas').insert({
         person_id: row.person_id,
         staff_id: row.staff_id,
-        type: 'wedding_scheduled',
+        // A dated wedding is a wedding, dated ahead. 'wedding_scheduled' is
+        // excluded from the feed, so filing one made the man disappear.
+        type: 'wedding',
         occurred_on: date,
         wedding_on: date,
         parent_simcha_id: row.id,
@@ -336,16 +339,13 @@ export default function AdminScreen({
                       <>
                         {/* Asking is half of it. This is the other half -- until
                             now there was nowhere to put the answer. */}
-                        <TextInput
-                          style={styles.dateInput}
-                          value={dateDraft[row.id] ?? ''}
-                          onChangeText={(v) =>
-                            setDateDraft((d) => ({ ...d, [row.id]: v }))
-                          }
-                          placeholder="YYYY-MM-DD"
-                          placeholderTextColor={colors.muted}
-                          autoCapitalize="none"
-                        />
+                        <View style={styles.dateInput}>
+                          <DateField
+                            value={dateDraft[row.id] ?? null}
+                            onChange={(v) => setDateDraft((d) => ({ ...d, [row.id]: v }))}
+                            placeholder="Pick the date"
+                          />
+                        </View>
                         <TouchableOpacity
                           style={[
                             styles.btn,
@@ -422,18 +422,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
   },
-  dateInput: {
-    minWidth: 128,
-    backgroundColor: colors.navy900,
-    borderWidth: 1,
-    borderColor: colors.ruleOnNavy,
-    borderRadius: radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    color: colors.white,
-    fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
-  },
+  dateInput: { minWidth: 150 },
   btn: {
     flexDirection: 'row',
     alignItems: 'center',

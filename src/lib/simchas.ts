@@ -193,6 +193,12 @@ export async function loadFeed(monthsBack = 24): Promise<FeedItem[]> {
  */
 export const FOLLOWS_ENGAGEMENT: SimchaType[] = ['wedding_scheduled', 'wedding'];
 
+/** What the scheduling options actually file. */
+const SCHEDULING_BECOMES: Partial<Record<SimchaType, SimchaType>> = {
+  wedding_scheduled: 'wedding',
+  child_wedding_scheduled: 'child_wedding',
+};
+
 /**
  * The engagement a wedding belongs to: the most recent one for this man that
  * nothing has been hung off yet.
@@ -270,7 +276,12 @@ export async function reportSimcha(opts: {
     const { error } = await supabase.from('simchas').insert({
       person_id: personId,
       staff_id: staffId,
-      type: type as never,
+      // Setting a date does not create a third kind of row. It creates the
+      // wedding, dated ahead -- which reads as "is getting married" until the
+      // day and as an announcement to send afterwards. The scheduling types are
+      // excluded from the feed, so filing one recorded the date and showed it
+      // nowhere.
+      type: (SCHEDULING_BECOMES[type] ?? type) as never,
       occurred_on: date,
       wedding_on: NEEDS_DATE.includes(type) ? date : null,
       // Without this the engagement never leaves the To Do queue. It clears on

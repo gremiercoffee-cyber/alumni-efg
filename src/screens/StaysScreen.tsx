@@ -12,6 +12,7 @@ import {
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Empty, Prose } from '../components/ui';
 import { supabase } from '../lib/supabase';
+import DateField from '../components/DatePicker';
 import { colors, radius, space, type } from '../theme';
 
 /**
@@ -229,19 +230,15 @@ export default function StaysScreen({ onChanged }: { onChanged: () => void }) {
 
                 {editing === s.id ? (
                   <View style={styles.editRow}>
-                    <TextInput
-                      style={styles.dateInput}
-                      value={draft.from}
-                      onChangeText={(t) => setDraft((d) => ({ ...d, from: t }))}
+                    <DateField
+                      value={draft.from || null}
+                      onChange={(t) => setDraft((d) => ({ ...d, from: t }))}
                       placeholder="from"
-                      placeholderTextColor={colors.mutedDark}
                     />
-                    <TextInput
-                      style={styles.dateInput}
-                      value={draft.to}
-                      onChangeText={(t) => setDraft((d) => ({ ...d, to: t }))}
+                    <DateField
+                      value={draft.to || null}
+                      onChange={(t) => setDraft((d) => ({ ...d, to: t }))}
                       placeholder="until"
-                      placeholderTextColor={colors.mutedDark}
                     />
                     <TouchableOpacity onPress={() => saveDates(s.id)} disabled={busy === s.id}>
                       <Text style={styles.saveText}>Save</Text>
@@ -364,7 +361,8 @@ const styles = StyleSheet.create({
   when: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: colors.muted },
   dates: { fontFamily: 'Poppins_400Regular', fontSize: 13.5, color: colors.cyan },
 
-  editRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  editRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   dateInput: {
     flexGrow: 1,
     minWidth: 108,
