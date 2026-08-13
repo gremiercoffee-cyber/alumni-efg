@@ -20,6 +20,7 @@ import {
   type Filters,
 } from './src/lib/alumni';
 import { loadFeed, type FeedItem } from './src/lib/simchas';
+import * as Updates from 'expo-updates';
 import { markNavigation, useBack } from './src/lib/useBack';
 import { rsvpTokenFromUrl } from './src/lib/events';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -187,6 +188,12 @@ export default function App() {
 
   const isAdmin = profile?.role === 'admin';
 
+  // 'embedded' means the APK is still running the bundle it shipped with -- no
+  // update has been applied, whatever the dashboard says was published.
+  const stamp = Updates.isEmbeddedLaunch || !Updates.updateId
+    ? 'embedded'
+    : Updates.updateId.slice(0, 6);
+
   const body = () => {
     if (tool === 'pending') {
       return <PendingUsersScreen onChanged={refresh} />;
@@ -285,6 +292,12 @@ export default function App() {
             <ActivityIndicator size="small" color={colors.cyan} style={{ marginLeft: 8 }} />
           ) : null}
         </View>
+
+        {/* Which bundle is running, and what this account is allowed to do.
+            Twice now we have had to reason backwards from "the button is not
+            there" -- was the update delivered, or is the account not an admin?
+            Both are one glance now instead of a deduction. */}
+        <Text style={styles.stamp}>{stamp}  ·  {profile?.role ?? '—'}</Text>
 
         {tool ? (
           <TouchableOpacity onPress={() => setTool(null)}>
@@ -395,6 +408,13 @@ const styles = StyleSheet.create({
   brandName: { fontFamily: 'Poppins_700Bold', fontSize: 15, color: colors.white },
   brandAt: { color: colors.cyan },
   signout: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: colors.muted, opacity: 0.8 },
+  stamp: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 9.5,
+    color: colors.muted,
+    opacity: 0.55,
+    marginRight: 10,
+  },
   // Small, and floating clear of the tab bar rather than being another tab --
   // it is an action, not a place.
   fab: {
