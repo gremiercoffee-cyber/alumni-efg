@@ -12,7 +12,9 @@ import { supabase } from './supabase';
 export type SimchaType =
   | 'engagement' | 'wedding_scheduled' | 'wedding' | 'birth' | 'bar_mitzvah'
   | 'child_engagement' | 'child_wedding_scheduled' | 'child_wedding'
-  | 'grandchild_birth' | 'other';
+  | 'grandchild_birth' | 'other'
+  // Not simchas, but reported the same way and shown in the same feed.
+  | 'visit_israel' | 'visit_came' | 'visit_stayed';
 
 /**
  * How a simcha reads, given whether its date has passed.
@@ -36,6 +38,12 @@ const PAST: Record<string, string> = {
   other: ' has a simcha',
   shabbaton: '',
   dinner: '',
+  israel_expected: ' is coming to Israel',
+  israel_here: ' was in Israel',
+  visit_expected: ' is coming to yeshiva',
+  visit_staying_expected: ' is coming to stay in yeshiva',
+  visit_came: ' came to yeshiva',
+  visit_stayed: ' stayed in yeshiva',
 };
 
 /** Only the ones whose date can legitimately be ahead of us. */
@@ -77,12 +85,21 @@ export const SIMCHA_VISUAL: Record<string, { icon: string; tint: string }> = {
   other: { icon: 'star-four-points', tint: '#b9cbee' },
   shabbaton: { icon: 'calendar-star', tint: '#6fa8ff' },
   dinner: { icon: 'silverware-fork-knife', tint: '#6fa8ff' },
+  israel_expected: { icon: 'airplane', tint: '#7ee8c0' },
+  israel_here: { icon: 'airplane-landing', tint: '#7ee8c0' },
+  visit_expected: { icon: 'door-open', tint: '#9fd0ff' },
+  visit_staying_expected: { icon: 'bed-outline', tint: '#9fd0ff' },
+  visit_came: { icon: 'door-open', tint: '#9fd0ff' },
+  visit_stayed: { icon: 'bed-outline', tint: '#9fd0ff' },
 };
 
 export const visualFor = (subtype: string) =>
   SIMCHA_VISUAL[subtype] ?? { icon: 'calendar', tint: '#b9cbee' };
 
 export const ALUMNUS_TYPES: [SimchaType, string][] = [
+  ['visit_israel', 'Coming to Israel'],
+  ['visit_came', 'Visiting yeshiva'],
+  ['visit_stayed', 'Staying in yeshiva'],
   ['engagement', 'Got engaged'],
   ['wedding_scheduled', 'Wedding date set'],
   ['wedding', 'Got married'],
@@ -103,6 +120,14 @@ export const REBBE_TYPES: [SimchaType, string][] = [
 
 /** These two are meaningless without the date -- it is the whole point of them. */
 export const NEEDS_DATE: SimchaType[] = ['wedding_scheduled', 'child_wedding_scheduled'];
+
+/**
+ * Visits are observations, not announcements. Anyone approved records one
+ * directly and nothing is sent -- making a rebbe wait for approval to note
+ * "he stayed over last Shabbos" would simply mean it never gets noted.
+ */
+export const VISIT_TYPES: SimchaType[] = ['visit_israel', 'visit_came', 'visit_stayed'];
+export const isVisit = (t: string) => (VISIT_TYPES as string[]).includes(t);
 
 export type FeedItem = {
   kind: string;
@@ -146,6 +171,24 @@ export async function reportSimcha(opts: {
   note?: string;
 }): Promise<{ committed: boolean }> {
   const { isAdmin, personId, staffId, type, date, note } = opts;
+
+  if (isVisit(type)) {
+    if (!personId) throw new Error('a visit belongs to an alumnus');
+    const on = date ?? new Date().toISOString().slice(0, 10);
+    const { error } = await supabase.from('visits').insert({
+      person_id: personId,
+      visited_on: on,
+      kind: type === 'visit_israel' ? 'israel' : 'yeshiva',
+      overnight: type === 'visit_stayed',
+      // Derived from the date rather than asked for separately: a date ahead of
+      // us is a plan, one behind is a record, and the feed re-reads it once the
+      // day passes.
+      expected: on > new Date().toISOString().slice(0, 10),
+      note: note ?? null,
+    });
+    if (error) throw error;
+    return { committed: true };
+  }
 
   if (isAdmin) {
     const { error } = await supabase.from('simchas').insert({

@@ -1051,6 +1051,7 @@ export type Database = {
           created_at: string
           expected: boolean
           id: number
+          kind: string
           nights: number | null
           note: string | null
           overnight: boolean
@@ -1062,6 +1063,7 @@ export type Database = {
           created_at?: string
           expected?: boolean
           id?: number
+          kind?: string
           nights?: number | null
           note?: string | null
           overnight?: boolean
@@ -1073,6 +1075,7 @@ export type Database = {
           created_at?: string
           expected?: boolean
           id?: number
+          kind?: string
           nights?: number | null
           note?: string | null
           overnight?: boolean

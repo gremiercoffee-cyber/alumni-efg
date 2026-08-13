@@ -15,6 +15,7 @@ import {
   ALUMNUS_TYPES,
   NEEDS_DATE,
   REBBE_TYPES,
+  isVisit,
   reportSimcha,
   type SimchaType,
 } from '../lib/simchas';
@@ -46,7 +47,9 @@ export default function ReportScreen({
   const [picking, setPicking] = useState<null | 'person' | 'staff' | 'type'>(null);
 
   const types = staffId ? REBBE_TYPES : ALUMNUS_TYPES;
-  const needsDate = simchaType ? NEEDS_DATE.includes(simchaType) : false;
+  const needsDate = simchaType
+    ? NEEDS_DATE.includes(simchaType) || isVisit(simchaType)
+    : false;
   const ready = (personId || staffId) && simchaType && (!needsDate || /^\d{4}-\d{2}-\d{2}$/.test(date));
 
   const personName = personId ? directory?.byId.get(personId)?.name ?? '' : '';
@@ -66,9 +69,11 @@ export default function ReportScreen({
         date: needsDate ? date : date || new Date().toISOString().slice(0, 10),
       });
       setResult(
-        committed
-          ? `Posted. ${personName || staffName} — ${typeLabel.toLowerCase()}. Staff are being notified.`
-          : `Filed for review. ${personName || staffName} — ${typeLabel.toLowerCase()}.`,
+        isVisit(simchaType)
+          ? `Recorded. ${personName} — ${typeLabel.toLowerCase()}.`
+          : committed
+            ? `Posted. ${personName || staffName} — ${typeLabel.toLowerCase()}. Staff are being notified.`
+            : `Filed for review. ${personName || staffName} — ${typeLabel.toLowerCase()}.`,
       );
       setPersonId(null); setStaffId(null); setSimchaType(''); setDate('');
       onDone();
@@ -118,7 +123,9 @@ export default function ReportScreen({
 
       {needsDate ? (
         <View style={styles.field}>
-          <Text style={styles.label}>WEDDING DATE</Text>
+          <Text style={styles.label}>
+            {isVisit(simchaType as SimchaType) ? 'WHEN' : 'WEDDING DATE'}
+          </Text>
           <TextInput
             style={styles.select}
             value={date}
@@ -128,8 +135,10 @@ export default function ReportScreen({
             autoCapitalize="none"
           />
           <Text style={styles.hint}>
-            This is the piece that was always missing. Until it is known, no reminder can be
-            scheduled.
+            {isVisit(simchaType as SimchaType)
+              ? 'A date ahead of today reads as a plan; one behind reads as a record.'
+              : 'This is the piece that was always missing. Until it is known, no '
+                + 'reminder can be scheduled.'}
           </Text>
         </View>
       ) : null}
@@ -150,7 +159,7 @@ export default function ReportScreen({
       {result ? (
         <View style={styles.result}>
           <Text style={styles.resultText}>{result}</Text>
-          {!isAdmin ? (
+          {!isAdmin && !isVisit(simchaType as SimchaType) ? (
             <Text style={styles.resultNote}>
               The admin reviews it before it goes anywhere. If ten rebbeim report the same
               thing, he still only gets one notification.
