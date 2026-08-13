@@ -189,6 +189,41 @@ export async function loadFeed(monthsBack = 24): Promise<FeedItem[]> {
 }
 
 /**
+ * The two things that finish an engagement. Both have to point back at it.
+ */
+export const FOLLOWS_ENGAGEMENT: SimchaType[] = ['wedding_scheduled', 'wedding'];
+
+/**
+ * The engagement a wedding belongs to: the most recent one for this man that
+ * nothing has been hung off yet.
+ *
+ * Returns null rather than throwing when there is none -- a wedding for a man
+ * whose engagement predates the app is still a wedding, and refusing to record
+ * it would be worse than losing the link.
+ */
+export async function openEngagementId(
+  personId: number | null,
+  staffId: number | null,
+): Promise<number | null> {
+  if (!personId && !staffId) return null;
+  const { data } = await supabase
+    .from('simchas')
+    .select('id')
+    .eq('type', 'engagement')
+    .eq(personId ? 'person_id' : 'staff_id', (personId ?? staffId) as number)
+    .order('occurred_on', { ascending: false });
+  if (!data?.length) return null;
+
+  const { data: taken } = await supabase
+    .from('simchas')
+    .select('parent_simcha_id')
+    .in('parent_simcha_id', data.map((e) => e.id))
+    .in('type', FOLLOWS_ENGAGEMENT as never[]);
+  const used = new Set((taken ?? []).map((t) => t.parent_simcha_id));
+  return data.find((e) => !used.has(e.id))?.id ?? null;
+}
+
+/**
  * File a report.
  *
  * An admin writes the simcha directly and that is what sends anything outward.
@@ -238,6 +273,12 @@ export async function reportSimcha(opts: {
       type: type as never,
       occurred_on: date,
       wedding_on: NEEDS_DATE.includes(type) ? date : null,
+      // Without this the engagement never leaves the To Do queue. It clears on
+      // a wedding row *linked back to it*, not merely on one existing for the
+      // same man -- so filing the date used to record it and nag anyway.
+      parent_simcha_id: FOLLOWS_ENGAGEMENT.includes(type)
+        ? await openEngagementId(personId, staffId)
+        : null,
       note: note ?? null,
     });
     if (error) throw error;

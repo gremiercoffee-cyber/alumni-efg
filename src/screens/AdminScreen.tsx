@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -78,6 +79,8 @@ export default function AdminScreen({
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [justAnnounced, setJustAnnounced] = useState<Set<number>>(new Set());
+  // Per-row, so typing a date into one card does not disturb another.
+  const [dateDraft, setDateDraft] = useState<Record<number, string>>({});
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -97,6 +100,44 @@ export default function AdminScreen({
 
   const personFor = (row: QueueRow) =>
     row.person_id ? (directory?.byId.get(row.person_id) ?? null) : null;
+
+  /**
+   * Record the date he just told you.
+   *
+   * `parent_simcha_id` is the whole point: the engagement leaves this queue on a
+   * wedding row linked back to it, not on one that merely exists for the same
+   * man. The row's id is the engagement, which is exactly what is needed.
+   */
+  async function saveWeddingDate(row: QueueRow) {
+    const date = dateDraft[row.id]?.trim() ?? '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      Alert.alert('Needs a full date', 'Write it as YYYY-MM-DD, for example 2026-11-24.');
+      return;
+    }
+    setBusyId(`${row.kind}-${row.id}`);
+    try {
+      const { error } = await supabase.from('simchas').insert({
+        person_id: row.person_id,
+        staff_id: row.staff_id,
+        type: 'wedding_scheduled',
+        occurred_on: date,
+        wedding_on: date,
+        parent_simcha_id: row.id,
+      });
+      if (error) throw error;
+      setDateDraft((d) => {
+        const next = { ...d };
+        delete next[row.id];
+        return next;
+      });
+      await load();
+      onChanged();
+    } catch (e) {
+      Alert.alert('Could not save', e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function sortBed(row: QueueRow) {
     setBusyId(`${row.kind}-${row.id}`);
@@ -299,16 +340,45 @@ export default function AdminScreen({
                         <Text style={styles.btnPrimaryText}>Send announcement</Text>
                       </TouchableOpacity>
                     ) : (
-                      <TouchableOpacity
-                        style={[styles.btn, styles.btnWa, (dnc || !person?.phone) && styles.btnOff]}
-                        disabled={dnc || !person?.phone}
-                        onPress={() => person && reachByPhone(person, onChanged)}
-                      >
-                        <FontAwesome name="whatsapp" size={16} color={colors.whatsapp} />
-                        <Text style={styles.btnText}>
-                          {dnc ? 'Do not contact' : person?.phone ? 'Ask him the date' : 'No number'}
-                        </Text>
-                      </TouchableOpacity>
+                      <>
+                        {/* Asking is half of it. This is the other half -- until
+                            now there was nowhere to put the answer. */}
+                        <TextInput
+                          style={styles.dateInput}
+                          value={dateDraft[row.id] ?? ''}
+                          onChangeText={(v) =>
+                            setDateDraft((d) => ({ ...d, [row.id]: v }))
+                          }
+                          placeholder="YYYY-MM-DD"
+                          placeholderTextColor={colors.muted}
+                          autoCapitalize="none"
+                        />
+                        <TouchableOpacity
+                          style={[
+                            styles.btn,
+                            styles.btnPrimary,
+                            !/^\d{4}-\d{2}-\d{2}$/.test(dateDraft[row.id] ?? '') && styles.btnOff,
+                          ]}
+                          disabled={busy || !/^\d{4}-\d{2}-\d{2}$/.test(dateDraft[row.id] ?? '')}
+                          onPress={() => saveWeddingDate(row)}
+                        >
+                          {busy ? (
+                            <ActivityIndicator color={colors.navy900} size="small" />
+                          ) : (
+                            <Text style={styles.btnPrimaryText}>Save</Text>
+                          )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.btn, styles.btnWa, (dnc || !person?.phone) && styles.btnOff]}
+                          disabled={dnc || !person?.phone}
+                          onPress={() => person && reachByPhone(person, onChanged)}
+                        >
+                          <FontAwesome name="whatsapp" size={16} color={colors.whatsapp} />
+                          <Text style={styles.btnText}>
+                            {dnc ? 'Do not contact' : person?.phone ? 'Ask him' : 'No number'}
+                          </Text>
+                        </TouchableOpacity>
+                      </>
                     )}
                   </View>
                 </View>
@@ -352,7 +422,25 @@ const styles = StyleSheet.create({
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
   rebbeim: { marginTop: 4, gap: 5 },
   rebbeimLabel: { ...type.label, fontSize: 9, color: colors.muted, opacity: 0.7 },
-  actions: { flexDirection: 'row', gap: space.sm, marginTop: space.sm, alignItems: 'center' },
+  actions: {
+    flexDirection: 'row',
+    gap: space.sm,
+    marginTop: space.sm,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  dateInput: {
+    minWidth: 128,
+    backgroundColor: colors.navy900,
+    borderWidth: 1,
+    borderColor: colors.ruleOnNavy,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    color: colors.white,
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+  },
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
