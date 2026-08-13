@@ -50,18 +50,22 @@ export const EVENT_TYPES: [string, string][] = [
  * Where the RSVP link points.
  *
  * On the web the page serving the app is the page serving the form, so the
- * origin is simply correct. In the APK there is no origin, so it has to be
- * configured -- and a link built against the wrong host looks fine and goes
- * nowhere, which is the worst kind of broken. Better to show the admin that it
- * is unset than to invent a host.
+ * origin is correct by definition and wins outright -- put a custom domain on
+ * this and the website starts handing out links to the new host on its own.
+ * Preferring the configured value would mean the site kept advertising the old
+ * one until someone remembered to edit .env.
+ *
+ * The APK has no origin, so there it has to be configured, and that is the only
+ * thing EXPO_PUBLIC_SITE_URL is for. A link built against the wrong host looks
+ * fine and goes nowhere, which is the worst kind of broken -- so when it is
+ * unset this returns null and the screen says so rather than inventing a host.
  */
 export function siteOrigin(): string | null {
-  const configured = process.env.EXPO_PUBLIC_SITE_URL;
-  if (configured) return configured.replace(/\/+$/, '');
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin;
   }
-  return null;
+  const configured = process.env.EXPO_PUBLIC_SITE_URL;
+  return configured ? configured.replace(/\/+$/, '') : null;
 }
 
 export function rsvpLink(token: string): string | null {
