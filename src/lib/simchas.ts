@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 
 /**
@@ -149,6 +150,29 @@ export type FeedItem = {
   created_at: string;
 };
 
+/**
+ * The feed, as it was last time the app ran.
+ *
+ * Home is the first thing anyone sees, and on mobile data the round trip is
+ * long enough to read as the app being broken. The cached copy paints
+ * immediately and the live one replaces it a moment later -- a slightly stale
+ * feed for half a second beats an empty one for three.
+ *
+ * Deliberately only the feed. The directory is ten times the size and nothing
+ * on this screen falls over without it: the filters and the stat row simply
+ * appear when it arrives.
+ */
+const FEED_CACHE = 'feed:v1';
+
+export async function cachedFeed(): Promise<FeedItem[] | null> {
+  try {
+    const raw = await AsyncStorage.getItem(FEED_CACHE);
+    return raw ? (JSON.parse(raw) as FeedItem[]) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadFeed(monthsBack = 24): Promise<FeedItem[]> {
   const from = new Date();
   from.setMonth(from.getMonth() - monthsBack);
@@ -158,7 +182,10 @@ export async function loadFeed(monthsBack = 24): Promise<FeedItem[]> {
     .gte('on_date', from.toISOString().slice(0, 10))
     .order('on_date', { ascending: false });
   if (error) throw error;
-  return (data ?? []) as FeedItem[];
+  const items = (data ?? []) as FeedItem[];
+  // Fire and forget: failing to cache must never fail the load.
+  void AsyncStorage.setItem(FEED_CACHE, JSON.stringify(items)).catch(() => {});
+  return items;
 }
 
 /**

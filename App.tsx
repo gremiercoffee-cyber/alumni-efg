@@ -19,7 +19,7 @@ import {
   type Directory,
   type Filters,
 } from './src/lib/alumni';
-import { loadFeed, type FeedItem } from './src/lib/simchas';
+import { cachedFeed, loadFeed, type FeedItem } from './src/lib/simchas';
 import * as Updates from 'expo-updates';
 import { markNavigation, useBack } from './src/lib/useBack';
 import { rsvpTokenFromUrl } from './src/lib/events';
@@ -97,21 +97,39 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     if (!session) return;
-    try {
-      setLoadError(null);
+    setLoadError(null);
+
+    // The feed is one small indexed query and it is the first thing on screen,
+    // so nothing is allowed to queue in front of it. It used to wait for the
+    // profile round trip and then for the directory -- 724 people across eight
+    // queries -- before a single row could paint.
+    const feedDone = loadFeed()
+      .then(setFeed)
+      .catch((e) => setLoadError(e instanceof Error ? e.message : 'Could not load.'));
+
+    // The directory needs the profile only for `mine`, which is a filter, so it
+    // is fetched alongside rather than ahead.
+    const dirDone = (async () => {
       const { data: prof } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
         .maybeSingle();
       setProfile(prof ?? null);
-      const [dir, f] = await Promise.all([loadDirectory(prof?.staff_id ?? null), loadFeed()]);
-      setDirectory(dir);
-      setFeed(f);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : 'Could not load.');
-    }
+      setDirectory(await loadDirectory(prof?.staff_id ?? null));
+    })().catch((e) => setLoadError(e instanceof Error ? e.message : 'Could not load.'));
+
+    await Promise.all([feedDone, dirDone]);
   }, [session]);
+
+  // Paint whatever was on screen last time, straight away, while the live copy
+  // is on its way. Only if nothing has arrived yet -- a stale feed must never
+  // overwrite a fresh one that happened to be quick.
+  useEffect(() => {
+    void cachedFeed().then((cached) => {
+      if (cached?.length) setFeed((live) => (live.length ? live : cached));
+    });
+  }, []);
 
   useEffect(() => {
     void refresh();
