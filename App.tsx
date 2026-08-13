@@ -26,9 +26,13 @@ import SignInScreen from './src/screens/SignInScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import ContactsScreen from './src/screens/ContactsScreen';
 import PersonScreen from './src/screens/PersonScreen';
+import PersonEditScreen from './src/screens/PersonEditScreen';
 import ReportScreen from './src/screens/ReportScreen';
 import AdminScreen from './src/screens/AdminScreen';
 import FilerSheet from './src/screens/FilerSheet';
+import AdminDrawer, { ADMIN_TOOLS } from './src/screens/AdminDrawer';
+import PendingUsersScreen from './src/screens/PendingUsersScreen';
+import ProposedEditsScreen from './src/screens/ProposedEditsScreen';
 import { topInset } from './src/components/ui';
 import { colors, space, type } from './src/theme';
 
@@ -59,6 +63,9 @@ export default function App() {
   const [feedYear, setFeedYear] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filerOpen, setFilerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [tool, setTool] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   // Required by file, not from the package index: that index pulls in all 18
   // Poppins weights and Metro bundles every one into the web build.
@@ -103,8 +110,20 @@ export default function App() {
   // Back goes: open record -> the list it came from -> Home -> out of the app.
   // Returning false hands the press to the OS, which is what closes the app.
   const goBack = useCallback(() => {
+    if (drawerOpen) {
+      setDrawerOpen(false);
+      return true;
+    }
     if (filerOpen) {
       setFilerOpen(false);
+      return true;
+    }
+    if (tool) {
+      setTool(null);
+      return true;
+    }
+    if (editing) {
+      setEditing(false);
       return true;
     }
     if (selected) {
@@ -116,7 +135,7 @@ export default function App() {
       return true;
     }
     return false;
-  }, [selected, tab, filerOpen]);
+  }, [selected, tab, filerOpen, drawerOpen, tool, editing]);
 
   useBack(goBack);
 
@@ -141,12 +160,32 @@ export default function App() {
   const isAdmin = profile?.role === 'admin';
 
   const body = () => {
+    if (tool === 'pending') {
+      return <PendingUsersScreen onChanged={refresh} />;
+    }
+    if (tool === 'edits') {
+      return <ProposedEditsScreen directory={directory} onChanged={refresh} />;
+    }
+    if (selected && editing) {
+      return (
+        <PersonEditScreen
+          person={selected}
+          isAdmin={!!isAdmin}
+          onBack={() => setEditing(false)}
+          onSaved={refresh}
+        />
+      );
+    }
     if (selected) {
       return (
         <PersonScreen
           person={selected}
           onBack={() => setSelected(null)}
           onContacted={refresh}
+          onEdit={() => {
+            markNavigation();
+            setEditing(true);
+          }}
         />
       );
     }
@@ -175,6 +214,7 @@ export default function App() {
             onFilters={setFilters}
             onOpen={(p) => {
               markNavigation();
+              setEditing(false);
               setSelected(p);
             }}
             onContacted={refresh}
@@ -189,6 +229,17 @@ export default function App() {
       <StatusBar style="light" />
 
       <View style={styles.appbar}>
+        {isAdmin ? (
+          <TouchableOpacity
+            onPress={() => setDrawerOpen(true)}
+            hitSlop={10}
+            style={styles.burger}
+            accessibilityLabel="Admin tools"
+          >
+            <MaterialIcons name="menu" size={22} color={colors.white} />
+          </TouchableOpacity>
+        ) : null}
+
         <View style={styles.brand}>
           <Text style={styles.brandName}>
             efg<Text style={styles.brandAt}>@</Text>aish
@@ -197,9 +248,20 @@ export default function App() {
             <ActivityIndicator size="small" color={colors.cyan} style={{ marginLeft: 8 }} />
           ) : null}
         </View>
-        <TouchableOpacity onPress={() => supabase.auth.signOut()}>
-          <Text style={styles.signout}>Sign out</Text>
-        </TouchableOpacity>
+
+        {tool ? (
+          <TouchableOpacity onPress={() => setTool(null)}>
+            <Text style={styles.signout}>
+              {ADMIN_TOOLS.find((t) => t.id === tool)?.label ?? 'Back'} ✕
+            </Text>
+          </TouchableOpacity>
+        ) : !isAdmin ? (
+          <TouchableOpacity onPress={() => supabase.auth.signOut()}>
+            <Text style={styles.signout}>Sign out</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 22 }} />
+        )}
       </View>
 
       {loadError ? (
@@ -215,6 +277,24 @@ export default function App() {
       )}
 
       {isAdmin ? (
+        <AdminDrawer
+          visible={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          onPick={(picked) => {
+            setDrawerOpen(false);
+            setSelected(null);
+            markNavigation();
+            setTool(picked);
+          }}
+          onSignOut={() => {
+            setDrawerOpen(false);
+            void supabase.auth.signOut();
+          }}
+          email={session.user.email ?? null}
+        />
+      ) : null}
+
+      {isAdmin && !tool && !editing ? (
         <>
           <TouchableOpacity
             style={styles.fab}
@@ -238,9 +318,11 @@ export default function App() {
             key={key}
             style={[styles.tab, tab === key && styles.tabOn]}
             onPress={() => {
-              if (key !== tab || selected) markNavigation();
+              if (key !== tab || selected || tool) markNavigation();
               setTab(key);
               setSelected(null);
+              setTool(null);
+              setEditing(false);
             }}
             accessibilityRole="tab"
             accessibilityState={{ selected: tab === key }}
@@ -271,7 +353,8 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
     paddingBottom: space.sm + 4,
   },
-  brand: { flexDirection: 'row', alignItems: 'center' },
+  burger: { paddingRight: 12, paddingVertical: 2 },
+  brand: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   brandName: { fontFamily: 'Poppins_700Bold', fontSize: 15, color: colors.white },
   brandAt: { color: colors.cyan },
   signout: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: colors.muted, opacity: 0.8 },

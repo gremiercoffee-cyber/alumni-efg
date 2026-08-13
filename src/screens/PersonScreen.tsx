@@ -11,10 +11,12 @@ export default function PersonScreen({
   person,
   onBack,
   onContacted,
+  onEdit,
 }: {
   person: AlumniRecord;
   onBack: () => void;
   onContacted: () => void;
+  onEdit: () => void;
 }) {
   const dnc = person.do_not_contact;
   const life = [
@@ -34,7 +36,12 @@ export default function PersonScreen({
 
       <ScrollView>
         <View style={styles.head}>
-          <Text style={styles.name}>{person.name}</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name}>{person.name}</Text>
+            <TouchableOpacity onPress={onEdit} hitSlop={10} accessibilityLabel="Edit his details">
+              <MaterialIcons name="edit" size={19} color={colors.cyan} />
+            </TouchableOpacity>
+          </View>
           {person.aliases.length ? (
             <Text style={styles.alias}>also recorded as {person.aliases.join(', ')}</Text>
           ) : null}
@@ -172,7 +179,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.ruleOnNavy,
   },
-  name: { fontFamily: 'Poppins_700Bold', fontSize: 23, color: colors.white, letterSpacing: -0.4 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  name: { flex: 1, fontFamily: 'Poppins_700Bold', fontSize: 23, color: colors.white, letterSpacing: -0.4 },
   alias: { fontFamily: 'Poppins_400Regular', fontSize: 12.5, color: colors.muted, opacity: 0.8 },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: space.sm + 2 },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
