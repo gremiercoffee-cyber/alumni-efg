@@ -20,12 +20,15 @@ import {
   type Filters,
 } from './src/lib/alumni';
 import { loadFeed, type FeedItem } from './src/lib/simchas';
+import { markNavigation, useBack } from './src/lib/useBack';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import SignInScreen from './src/screens/SignInScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import ContactsScreen from './src/screens/ContactsScreen';
 import PersonScreen from './src/screens/PersonScreen';
 import ReportScreen from './src/screens/ReportScreen';
 import AdminScreen from './src/screens/AdminScreen';
+import FilerSheet from './src/screens/FilerSheet';
 import { topInset } from './src/components/ui';
 import { colors, space, type } from './src/theme';
 
@@ -55,6 +58,7 @@ export default function App() {
   const [feedMine, setFeedMine] = useState(false);
   const [feedYear, setFeedYear] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [filerOpen, setFilerOpen] = useState(false);
 
   // Required by file, not from the package index: that index pulls in all 18
   // Poppins weights and Metro bundles every one into the web build.
@@ -95,6 +99,26 @@ export default function App() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Back goes: open record -> the list it came from -> Home -> out of the app.
+  // Returning false hands the press to the OS, which is what closes the app.
+  const goBack = useCallback(() => {
+    if (filerOpen) {
+      setFilerOpen(false);
+      return true;
+    }
+    if (selected) {
+      setSelected(null);
+      return true;
+    }
+    if (tab !== 'home') {
+      setTab('home');
+      return true;
+    }
+    return false;
+  }, [selected, tab, filerOpen]);
+
+  useBack(goBack);
 
   if (!ready || !fontsLoaded) {
     return (
@@ -149,7 +173,10 @@ export default function App() {
             directory={directory}
             filters={filters}
             onFilters={setFilters}
-            onOpen={setSelected}
+            onOpen={(p) => {
+              markNavigation();
+              setSelected(p);
+            }}
             onContacted={refresh}
             mineOnly={tab === 'mine'}
           />
@@ -187,12 +214,31 @@ export default function App() {
         <View style={styles.flex}>{body()}</View>
       )}
 
+      {isAdmin ? (
+        <>
+          <TouchableOpacity
+            style={styles.fab}
+            onPress={() => setFilerOpen(true)}
+            accessibilityLabel="File something"
+          >
+            <MaterialIcons name="bolt" size={20} color={colors.navy900} />
+            <Text style={styles.fabText}>File</Text>
+          </TouchableOpacity>
+          <FilerSheet
+            visible={filerOpen}
+            onClose={() => setFilerOpen(false)}
+            onFiled={refresh}
+          />
+        </>
+      ) : null}
+
       <View style={styles.tabs}>
         {(isAdmin ? [...TABS, ADMIN_TAB] : TABS).map(([key, icon, label]) => (
           <TouchableOpacity
             key={key}
             style={[styles.tab, tab === key && styles.tabOn]}
             onPress={() => {
+              if (key !== tab || selected) markNavigation();
               setTab(key);
               setSelected(null);
             }}
@@ -229,6 +275,27 @@ const styles = StyleSheet.create({
   brandName: { fontFamily: 'Poppins_700Bold', fontSize: 15, color: colors.white },
   brandAt: { color: colors.cyan },
   signout: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: colors.muted, opacity: 0.8 },
+  // Small, and floating clear of the tab bar rather than being another tab --
+  // it is an action, not a place.
+  fab: {
+    position: 'absolute',
+    right: space.md,
+    bottom: 78,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.cyan,
+    borderRadius: 22,
+    paddingLeft: 14,
+    paddingRight: 16,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  fabText: { fontFamily: 'Poppins_700Bold', fontSize: 14, color: colors.navy900 },
   tabs: {
     flexDirection: 'row',
     borderTopWidth: 1,

@@ -9,7 +9,8 @@
     "android": {
       "package": "edu.aish.efgalumni",
       "permissions": [
-        "android.permission.POST_NOTIFICATIONS"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -19,6 +20,12 @@
     "plugins": [
       "expo-notifications",
       "expo-asset",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "EFG Alumni uses the microphone so you can dictate what to file."
+        }
+      ],
       "./plugins/withAbiFilters"
     ],
     "web": {

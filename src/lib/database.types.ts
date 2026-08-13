@@ -184,18 +184,30 @@ export type Database = {
       event_attendance: {
         Row: {
           event_id: number
+          guests: number
+          id: number
           note: string | null
-          person_id: number
+          person_id: number | null
+          rsvped_at: string | null
+          source: string
         }
         Insert: {
           event_id: number
+          guests?: number
+          id?: number
           note?: string | null
-          person_id: number
+          person_id?: number | null
+          rsvped_at?: string | null
+          source?: string
         }
         Update: {
           event_id?: number
+          guests?: number
+          id?: number
           note?: string | null
-          person_id?: number
+          person_id?: number | null
+          rsvped_at?: string | null
+          source?: string
         }
         Relationships: [
           {
@@ -231,6 +243,8 @@ export type Database = {
           location: string | null
           name: string
           on_feed: boolean
+          rsvp_open: boolean
+          rsvp_token: string | null
           starts_on: string | null
           type: Database["public"]["Enums"]["event_type"]
           year: number
@@ -244,6 +258,8 @@ export type Database = {
           location?: string | null
           name: string
           on_feed?: boolean
+          rsvp_open?: boolean
+          rsvp_token?: string | null
           starts_on?: string | null
           type?: Database["public"]["Enums"]["event_type"]
           year: number
@@ -257,6 +273,8 @@ export type Database = {
           location?: string | null
           name?: string
           on_feed?: boolean
+          rsvp_open?: boolean
+          rsvp_token?: string | null
           starts_on?: string | null
           type?: Database["public"]["Enums"]["event_type"]
           year?: number
@@ -687,6 +705,88 @@ export type Database = {
           },
         ]
       }
+      person_edits: {
+        Row: {
+          created_at: string
+          field: string
+          id: number
+          new_value: string | null
+          old_value: string | null
+          person_id: number
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["claim_status"]
+          submitted_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          field: string
+          id?: number
+          new_value?: string | null
+          old_value?: string | null
+          person_id: number
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["claim_status"]
+          submitted_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          field?: string
+          id?: number
+          new_value?: string | null
+          old_value?: string | null
+          person_id?: number
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["claim_status"]
+          submitted_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "person_edits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_edits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "person_edits_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "pending_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_edits_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_edits_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "pending_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_edits_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -949,6 +1049,7 @@ export type Database = {
       visits: {
         Row: {
           created_at: string
+          expected: boolean
           id: number
           nights: number | null
           note: string | null
@@ -959,6 +1060,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          expected?: boolean
           id?: number
           nights?: number | null
           note?: string | null
@@ -969,6 +1071,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          expected?: boolean
           id?: number
           nights?: number | null
           note?: string | null
@@ -1139,7 +1242,12 @@ export type Database = {
     }
     Functions: {
       admin_emails: { Args: never; Returns: string[] }
+      apply_person_edit: {
+        Args: { p_approve: boolean; p_edit_id: number }
+        Returns: undefined
+      }
       current_staff_id: { Args: never; Returns: number }
+      editable_person_fields: { Args: never; Returns: string[] }
       fan_out_notification: { Args: { p_outbox_id: number }; Returns: number }
       is_admin: { Args: never; Returns: boolean }
       is_approved: { Args: never; Returns: boolean }
@@ -1147,12 +1255,30 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      rsvp_event: {
+        Args: { p_token: string }
+        Returns: {
+          description: string
+          event_name: string
+          location: string
+          starts_on: string
+        }[]
+      }
       set_user_role: {
         Args: {
           p_role: Database["public"]["Enums"]["user_role"]
           p_user: string
         }
         Returns: undefined
+      }
+      submit_rsvp: {
+        Args: {
+          p_email: string
+          p_guests?: number
+          p_name?: string
+          p_token: string
+        }
+        Returns: string
       }
     }
     Enums: {
@@ -1170,6 +1296,7 @@ export type Database = {
         | "bar_mitzvah"
         | "wedding_scheduled"
         | "child_bar_mitzvah"
+        | "child_wedding_scheduled"
       delivery_status: "pending" | "sent" | "failed" | "skipped"
       event_type: "shabbaton" | "dinner" | "other"
       family_relation: "father" | "mother" | "other"
@@ -1191,6 +1318,7 @@ export type Database = {
         | "bar_mitzvah"
         | "wedding_scheduled"
         | "child_bar_mitzvah"
+        | "child_wedding_scheduled"
       user_role: "admin" | "staff" | "viewer" | "pending"
     }
     CompositeTypes: {
@@ -1333,6 +1461,7 @@ export const Constants = {
         "bar_mitzvah",
         "wedding_scheduled",
         "child_bar_mitzvah",
+        "child_wedding_scheduled",
       ],
       delivery_status: ["pending", "sent", "failed", "skipped"],
       event_type: ["shabbaton", "dinner", "other"],
@@ -1356,6 +1485,7 @@ export const Constants = {
         "bar_mitzvah",
         "wedding_scheduled",
         "child_bar_mitzvah",
+        "child_wedding_scheduled",
       ],
       user_role: ["admin", "staff", "viewer", "pending"],
     },

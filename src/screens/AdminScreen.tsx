@@ -14,7 +14,7 @@ import { Badge, Empty, Prose } from '../components/ui';
 import type { Directory } from '../lib/alumni';
 import { announcementFor } from '../lib/announce';
 import { announcementLink, reachByPhone } from '../lib/contact';
-import { SIMCHA_LABEL } from '../lib/simchas';
+import { labelFor } from '../lib/simchas';
 import { supabase } from '../lib/supabase';
 import { colors, radius, space, type } from '../theme';
 
@@ -31,7 +31,7 @@ import { colors, radius, space, type } from '../theme';
  */
 
 type QueueRow = {
-  kind: 'claim' | 'awaiting_date' | 'announce';
+  kind: 'claim' | 'awaiting_date' | 'upcoming' | 'announce';
   id: number;
   subtype: string;
   since: string;
@@ -45,9 +45,27 @@ type QueueRow = {
 
 const GROUPS: [QueueRow['kind'], string, string][] = [
   ['claim', 'NEEDS YOUR REVIEW', 'Reported by someone else. Nothing has been sent.'],
-  ['awaiting_date', 'ENGAGED, NO WEDDING DATE', 'Ask him when it is, then report the date.'],
-  ['announce', 'NOT ANNOUNCED YET', 'Recorded, but the Mazal Tov has not gone out.'],
+  ['awaiting_date', 'SET A WEDDING DATE', 'Engaged, but nobody has recorded when the wedding is.'],
+  ['upcoming', 'COMING UP', 'Dated and waiting. The Mazal Tov goes out on the day.'],
+  ['announce', 'SEND THE MAZAL TOV', 'Happened, and the announcement has not gone out.'],
 ];
+
+/** Days from today to a date, negative for the past. */
+function daysTo(iso: string | null): number {
+  if (!iso) return -1;
+  const then = new Date(`${iso}T00:00:00`).getTime();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((then - today.getTime()) / 86400000);
+}
+
+function whenText(days: number): string {
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  if (days > 0) return `in ${days} days`;
+  if (days === -1) return 'yesterday';
+  return `${-days} days ago`;
+}
 
 export default function AdminScreen({
   directory,
@@ -216,11 +234,22 @@ export default function AdminScreen({
                     <Text style={styles.when}>
                       {kind === 'awaiting_date'
                         ? `engaged ${row.report_count} days ago`
-                        : since(row.since)}
+                        : row.on_date
+                          ? whenText(daysTo(row.on_date))
+                          : since(row.since)}
                     </Text>
                   </View>
+                  {/* Tense follows the date. This said "got married" about a
+                      wedding still months away. */}
                   <Text style={styles.what}>
-                    {(SIMCHA_LABEL[row.subtype] ?? row.subtype).trim().replace(/^'s /, 'his ')}
+                    {labelFor(row.subtype, daysTo(row.on_date)).trim().replace(/^'s /, 'his ')}
+                    {row.on_date
+                      ? ` · ${new Date(`${row.on_date}T00:00:00`).toLocaleDateString(undefined, {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}`
+                      : ''}
                   </Text>
 
                   {kind === 'claim' && row.report_count > 1 ? (
@@ -275,6 +304,17 @@ export default function AdminScreen({
                           <Text style={styles.btnText}>Reject</Text>
                         </TouchableOpacity>
                       </>
+                    ) : kind === 'upcoming' ? (
+                      <TouchableOpacity
+                        style={[styles.btn, styles.btnWa, (dnc || !person?.phone) && styles.btnOff]}
+                        disabled={dnc || !person?.phone}
+                        onPress={() => person && reachByPhone(person, onChanged)}
+                      >
+                        <FontAwesome name="whatsapp" size={16} color={colors.whatsapp} />
+                        <Text style={styles.btnText}>
+                          {dnc ? 'Do not contact' : person?.phone ? 'Wish him' : 'No number'}
+                        </Text>
+                      </TouchableOpacity>
                     ) : kind === 'announce' ? (
                       <TouchableOpacity
                         style={[styles.btn, styles.btnPrimary]}
