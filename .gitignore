@@ -26,3 +26,7 @@ ios/
 # would bloat every clone forever.
 *.apk
 *.aab
+
+# Local gradle build output
+build.log
+build.err
