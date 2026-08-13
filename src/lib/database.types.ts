@@ -221,6 +221,13 @@ export type Database = {
             foreignKeyName: "event_attendance_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
+            referencedRelation: "event_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_attendance_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
@@ -1225,6 +1232,71 @@ export type Database = {
           },
         ]
       }
+      event_roster: {
+        Row: {
+          display_name: string | null
+          email: string | null
+          event_id: number | null
+          guests: number | null
+          id: number | null
+          note: string | null
+          person_id: number | null
+          phone: string | null
+          rsvped_at: string | null
+          source: string | null
+          unmatched: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_attendance_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "event_summary"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_attendance_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_attendance_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_attendance_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+        ]
+      }
+      event_summary: {
+        Row: {
+          coming: number | null
+          description: string | null
+          ends_on: string | null
+          heads: number | null
+          id: number | null
+          location: string | null
+          name: string | null
+          on_feed: boolean | null
+          rsvp_open: boolean | null
+          rsvp_token: string | null
+          starts_on: string | null
+          type: string | null
+          unmatched: number | null
+          via_link: number | null
+          year: number | null
+        }
+        Relationships: []
+      }
       feed: {
         Row: {
           created_at: string | null
@@ -1357,6 +1429,10 @@ export type Database = {
         Args: { p_approve: boolean; p_edit_id: number }
         Returns: undefined
       }
+      attach_rsvp: {
+        Args: { p_attendance_id: number; p_person_id: number }
+        Returns: undefined
+      }
       current_staff_id: { Args: never; Returns: number }
       editable_person_fields: { Args: never; Returns: string[] }
       fan_out_notification: { Args: { p_outbox_id: number }; Returns: number }
@@ -1366,10 +1442,12 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      reset_rsvp_token: { Args: { p_event_id: number }; Returns: string }
       rsvp_event: {
         Args: { p_token: string }
         Returns: {
           description: string
+          ends_on: string
           event_name: string
           location: string
           starts_on: string

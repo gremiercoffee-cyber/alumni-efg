@@ -64,7 +64,7 @@ export const ADMIN_TOOLS: AdminTool[] = [
     label: 'Events & RSVPs',
     hint: 'Add an event, share its link, see who is coming',
     icon: 'calendar-star',
-    ready: false,
+    ready: true,
   },
   {
     id: 'pending',

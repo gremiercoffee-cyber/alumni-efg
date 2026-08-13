@@ -21,6 +21,7 @@ import {
 } from './src/lib/alumni';
 import { loadFeed, type FeedItem } from './src/lib/simchas';
 import { markNavigation, useBack } from './src/lib/useBack';
+import { rsvpTokenFromUrl } from './src/lib/events';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import SignInScreen from './src/screens/SignInScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -35,6 +36,8 @@ import PendingUsersScreen from './src/screens/PendingUsersScreen';
 import ProposedEditsScreen from './src/screens/ProposedEditsScreen';
 import ReportedScreen from './src/screens/ReportedScreen';
 import StaysScreen from './src/screens/StaysScreen';
+import EventsScreen from './src/screens/EventsScreen';
+import RsvpScreen from './src/screens/RsvpScreen';
 import { topInset } from './src/components/ui';
 import { colors, space, type } from './src/theme';
 
@@ -68,6 +71,10 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [tool, setTool] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+
+  // Read once. The path does not change under the app's feet -- following a
+  // link is a fresh load.
+  const [rsvpToken] = useState(rsvpTokenFromUrl);
 
   // Required by file, not from the package index: that index pulls in all 18
   // Poppins weights and Metro bundles every one into the web build.
@@ -141,6 +148,25 @@ export default function App() {
 
   useBack(goBack);
 
+  // Decided before the session is: a man tapping the link has no account, and
+  // bouncing him to a sign-in page would lose the RSVP entirely.
+  if (rsvpToken) {
+    if (!fontsLoaded) {
+      return (
+        <View style={styles.center}>
+          <StatusBar style="light" />
+          <ActivityIndicator color={colors.cyan} />
+        </View>
+      );
+    }
+    return (
+      <>
+        <StatusBar style="light" />
+        <RsvpScreen token={rsvpToken} />
+      </>
+    );
+  }
+
   if (!ready || !fontsLoaded) {
     return (
       <View style={styles.center}>
@@ -173,6 +199,9 @@ export default function App() {
     }
     if (tool === 'stays') {
       return <StaysScreen onChanged={refresh} />;
+    }
+    if (tool === 'events') {
+      return <EventsScreen directory={directory} onChanged={refresh} />;
     }
     if (selected && editing) {
       return (
