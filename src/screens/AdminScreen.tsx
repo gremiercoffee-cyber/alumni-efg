@@ -22,17 +22,22 @@ import { colors, radius, space, type } from '../theme';
 /**
  * Everything waiting on the admin, in one place.
  *
- *   needs review     someone reported a simcha; nothing has happened yet
+ *   needs a bed      staying in the yeshiva with nowhere to sleep
  *   no wedding date  a man got engaged and the date never arrived
- *   not announced    recorded, but the Mazal Tov has not gone out
+ *   not announced    it has happened, and the Mazal Tov has not gone out
+ *
+ * Only what is owed. A wedding three months away is news, not work, and it
+ * reads correctly on the feed -- putting it here made the queue mostly things
+ * there was nothing to do about, which is how a queue stops being read.
  *
  * The last one replaces the email the old script sent, with a pre-filled
- * WhatsApp link. The difference is that this remembers whether it was sent --
- * and, now, lets you take that back.
+ * WhatsApp link. It goes to the alumni group, not to the man: announcing that
+ * he is married is not a message to him, so his own number never comes into
+ * it.
  */
 
 type QueueRow = {
-  kind: 'awaiting_date' | 'needs_bed' | 'upcoming' | 'announce';
+  kind: 'awaiting_date' | 'needs_bed' | 'announce';
   id: number;
   subtype: string;
   since: string;
@@ -47,7 +52,6 @@ type QueueRow = {
 const GROUPS: [QueueRow['kind'], string, string][] = [
   ['needs_bed', 'NEEDS A BED', 'Staying in the yeshiva with nowhere to sleep yet.'],
   ['awaiting_date', 'SET A WEDDING DATE', 'Engaged, but nobody has recorded when the wedding is.'],
-  ['upcoming', 'COMING UP', 'Dated and waiting. The Mazal Tov goes out on the day.'],
   ['announce', 'SEND THE MAZAL TOV', 'Happened, and the announcement has not gone out.'],
 ];
 
@@ -320,17 +324,6 @@ export default function AdminScreen({
                         ) : (
                           <Text style={styles.btnPrimaryText}>Bed sorted</Text>
                         )}
-                      </TouchableOpacity>
-                    ) : kind === 'upcoming' ? (
-                      <TouchableOpacity
-                        style={[styles.btn, styles.btnWa, (dnc || !person?.phone) && styles.btnOff]}
-                        disabled={dnc || !person?.phone}
-                        onPress={() => person && reachByPhone(person, onChanged)}
-                      >
-                        <FontAwesome name="whatsapp" size={16} color={colors.whatsapp} />
-                        <Text style={styles.btnText}>
-                          {dnc ? 'Do not contact' : person?.phone ? 'Wish him' : 'No number'}
-                        </Text>
                       </TouchableOpacity>
                     ) : kind === 'announce' ? (
                       <TouchableOpacity
