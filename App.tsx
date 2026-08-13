@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -76,6 +77,7 @@ export default function App() {
   // Read once. The path does not change under the app's feet -- following a
   // link is a fresh load.
   const [rsvpToken] = useState(rsvpTokenFromUrl);
+  const [checking, setChecking] = useState(false);
 
   // Required by file, not from the package index: that index pulls in all 18
   // Poppins weights and Metro bundles every one into the web build.
@@ -212,6 +214,37 @@ export default function App() {
     ? 'embedded'
     : Updates.updateId.slice(0, 6);
 
+  /**
+   * Fetch an update now, and say what happened either way.
+   *
+   * The automatic path is silent by design: it checks at launch, downloads in
+   * the background, and applies next time. When that does not work there is
+   * nothing to see and nothing to try. This is the deliberate version -- it
+   * waits, it reports, and it reloads on the spot.
+   */
+  async function checkForUpdate() {
+    if (!Updates.isEnabled) {
+      Alert.alert('Not available here', 'This build cannot fetch updates.');
+      return;
+    }
+    setChecking(true);
+    try {
+      const found = await Updates.checkForUpdateAsync();
+      if (!found.isAvailable) {
+        Alert.alert('Up to date', `Running ${stamp}. Nothing newer has been published.`);
+        return;
+      }
+      await Updates.fetchUpdateAsync();
+      Alert.alert('Update ready', 'The app will restart to use it.', [
+        { text: 'Restart', onPress: () => void Updates.reloadAsync() },
+      ]);
+    } catch (e) {
+      Alert.alert('Could not update', e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setChecking(false);
+    }
+  }
+
   const body = () => {
     if (tool === 'pending') {
       return <PendingUsersScreen onChanged={refresh} />;
@@ -315,7 +348,11 @@ export default function App() {
             Twice now we have had to reason backwards from "the button is not
             there" -- was the update delivered, or is the account not an admin?
             Both are one glance now instead of a deduction. */}
-        <Text style={styles.stamp}>{stamp}  ·  {profile?.role ?? '—'}</Text>
+        <TouchableOpacity onPress={checkForUpdate} disabled={checking} hitSlop={10}>
+          <Text style={styles.stamp}>
+            {checking ? 'checking…' : `${stamp}  ·  ${profile?.role ?? '—'}`}
+          </Text>
+        </TouchableOpacity>
 
         {tool ? (
           <TouchableOpacity onPress={() => setTool(null)}>
