@@ -64,6 +64,7 @@ export default function HomeScreen({
   onMineOnly,
   onYear,
   onContacted,
+  onOpen,
 }: {
   feed: FeedItem[];
   directory: Directory | null;
@@ -72,6 +73,7 @@ export default function HomeScreen({
   onMineOnly: (v: boolean) => void;
   onYear: (v: string | null) => void;
   onContacted: () => void;
+  onOpen: (item: FeedItem) => void;
 }) {
   const today = startOfDay(new Date());
   const todayIso = today.toISOString().slice(0, 10);
@@ -172,7 +174,9 @@ export default function HomeScreen({
           item.kind === 'header' ? (
             <Text style={styles.sectionHead}>{item.title.toUpperCase()}</Text>
           ) : (
-            <Row item={item.item} person={item.person} today={today} onContacted={onContacted} />
+            <Row item={item.item} person={item.person} today={today} onContacted={onContacted}
+          onOpen={onOpen}
+        />
           )
         }
         ListEmptyComponent={
@@ -198,11 +202,13 @@ function Row({
   person,
   today,
   onContacted,
+  onOpen,
 }: {
   item: FeedItem;
   person: AlumniRecord | null;
   today: Date;
   onContacted: () => void;
+  onOpen: (item: FeedItem) => void;
 }) {
   const when = new Date(`${item.on_date}T00:00:00`);
   const days = Math.round((startOfDay(when).getTime() - today.getTime()) / MS_DAY);
@@ -228,7 +234,12 @@ function Row({
   const dnc = person?.do_not_contact ?? false;
 
   return (
-    <View style={styles.row}>
+    <TouchableOpacity
+      style={styles.row}
+      activeOpacity={0.7}
+      onPress={() => onOpen(item)}
+      accessibilityLabel={`Open ${item.subject_name ?? 'this'}`}
+    >
       <View style={[styles.dateBox, days === 0 && styles.dateBoxToday]}>
         <Text style={[styles.dateDay, days === 0 && styles.dateTodayText]}>{when.getDate()}</Text>
         <Text style={[styles.dateMonth, days === 0 && styles.dateTodayMonth]}>
@@ -270,7 +281,7 @@ function Row({
           </TouchableOpacity>
         </View>
       ) : null}
-    </View>
+    </TouchableOpacity>
   );
 }
 

@@ -40,6 +40,7 @@ import ReportedScreen from './src/screens/ReportedScreen';
 import StaysScreen from './src/screens/StaysScreen';
 import EventsScreen from './src/screens/EventsScreen';
 import RsvpScreen from './src/screens/RsvpScreen';
+import SimchaSheet from './src/screens/SimchaSheet';
 import { topInset } from './src/components/ui';
 import { colors, space, type } from './src/theme';
 
@@ -78,6 +79,8 @@ export default function App() {
   // link is a fresh load.
   const [rsvpToken] = useState(rsvpTokenFromUrl);
   const [checking, setChecking] = useState(false);
+  // The feed item being looked at, for fixing or removing it.
+  const [openItem, setOpenItem] = useState<FeedItem | null>(null);
 
   // Required by file, not from the package index: that index pulls in all 18
   // Poppins weights and Metro bundles every one into the web build.
@@ -140,6 +143,10 @@ export default function App() {
   // Back goes: open record -> the list it came from -> Home -> out of the app.
   // Returning false hands the press to the OS, which is what closes the app.
   const goBack = useCallback(() => {
+    if (openItem) {
+      setOpenItem(null);
+      return true;
+    }
     if (drawerOpen) {
       setDrawerOpen(false);
       return true;
@@ -165,7 +172,7 @@ export default function App() {
       return true;
     }
     return false;
-  }, [selected, tab, filerOpen, drawerOpen, tool, editing]);
+  }, [selected, tab, filerOpen, drawerOpen, tool, editing, openItem]);
 
   useBack(goBack);
 
@@ -295,6 +302,7 @@ export default function App() {
             onMineOnly={setFeedMine}
             onYear={setFeedYear}
             onContacted={refresh}
+            onOpen={setOpenItem}
           />
         );
       case 'report':
@@ -314,6 +322,20 @@ export default function App() {
             }}
             onContacted={refresh}
             mineOnly={tab === 'mine'}
+            isAdmin={!!isAdmin}
+            onCreated={async (id) => {
+              // Straight into his record with the pencil open: a name on its own
+              // is not why anyone adds a man, it is the first field of several.
+              await refresh();
+              const fresh = await loadDirectory(profile?.staff_id ?? null);
+              setDirectory(fresh);
+              const p = fresh.byId.get(id);
+              if (p) {
+                markNavigation();
+                setSelected(p);
+                setEditing(true);
+              }
+            }}
           />
         );
     }
@@ -416,6 +438,20 @@ export default function App() {
           />
         </>
       ) : null}
+
+      <SimchaSheet
+        item={openItem}
+        isAdmin={!!isAdmin}
+        onClose={() => setOpenItem(null)}
+        onChanged={refresh}
+        onOpenPerson={(id) => {
+          const p = directory?.byId.get(id);
+          if (!p) return;
+          markNavigation();
+          setEditing(false);
+          setSelected(p);
+        }}
+      />
 
       <View style={styles.tabs}>
         {(isAdmin ? [...TABS, ADMIN_TAB] : TABS).map(([key, icon, label]) => (
