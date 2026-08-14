@@ -147,10 +147,7 @@ export default function SimchaSheet({
           </View>
 
           {!isAdmin ? (
-            <Text style={styles.hint}>
-              Only the admin can change or remove something once it is filed. Tell him
-              what is wrong and he will fix it.
-            </Text>
+            <Suggest item={item} onDone={onClose} />
           ) : (
             <>
               <Text style={styles.label}>{isEventRow ? 'STARTS' : 'WHEN'}</Text>
@@ -221,7 +218,108 @@ export default function SimchaSheet({
   );
 }
 
+/**
+ * What a rebbe sees instead of the editing controls.
+ *
+ * He is often the one who actually knows -- that the date is wrong, or when the
+ * wedding is for a man whose engagement has been sitting dateless for months.
+ * So this asks for the fact rather than telling him to go and find the admin.
+ *
+ * Against an engagement it offers the wedding date, which is not an edit at all:
+ * approving it creates the wedding. Against anything else it offers to move the
+ * date. Either way nothing changes until the admin agrees.
+ */
+function Suggest({ item, onDone }: { item: FeedItem; onDone: () => void }) {
+  const wedding = item.subtype === 'engagement';
+  const [value, setValue] = useState<string | null>(wedding ? null : item.on_date);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  async function send() {
+    if (!value) return;
+    setBusy(true);
+    try {
+      const { data: me } = await supabase.auth.getUser();
+      // Cast because the generated types are built from the live schema, and
+      // this table is created by migration 0027. Regenerating them will drop
+      // the cast.
+      const { error } = await (supabase as unknown as {
+        from: (t: string) => {
+          insert: (v: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
+        };
+      }).from('simcha_edits').insert({
+        simcha_id: item.id,
+        field: wedding ? 'wedding_on' : 'occurred_on',
+        new_value: value,
+        reason: reason.trim() || null,
+        submitted_by: me.user?.id ?? null,
+      });
+      if (error) throw error;
+      setSent(true);
+    } catch (e) {
+      Alert.alert(
+        'Could not send it',
+        e instanceof Error ? e.message : 'Unknown error',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (sent) {
+    return (
+      <View style={{ gap: 6 }}>
+        <Text style={styles.sentTitle}>Sent to the admin</Text>
+        <Text style={styles.hint}>
+          Nothing has changed yet. He decides, and if several people say the same
+          thing he is only told once.
+        </Text>
+        <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onDone}>
+          <Text style={styles.btnPrimaryText}>Done</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <Text style={styles.label}>{wedding ? 'WHEN IS THE WEDDING' : 'WHEN WAS IT'}</Text>
+      <DateField value={value} onChange={setValue} />
+      <Text style={styles.hint}>
+        {wedding
+          ? 'If you know the date, this is the most useful thing you can give. It is '
+            + 'the piece that has always gone missing.'
+          : 'Only suggest a change if you think the date on it is wrong.'}
+      </Text>
+
+      <Text style={styles.label}>HOW YOU KNOW</Text>
+      <TextInput
+        style={styles.note}
+        value={reason}
+        onChangeText={setReason}
+        multiline
+        placeholder="His brother told me…"
+        placeholderTextColor={colors.muted}
+      />
+
+      <TouchableOpacity
+        style={[styles.btn, styles.btnPrimary, !value && styles.btnOff, { marginTop: space.md }]}
+        disabled={!value || busy}
+        onPress={send}
+      >
+        {busy ? (
+          <ActivityIndicator color={colors.navy900} size="small" />
+        ) : (
+          <Text style={styles.btnPrimaryText}>Suggest this</Text>
+        )}
+      </TouchableOpacity>
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
+  sentTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 15, color: colors.cyan },
   wrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.navy900,

@@ -136,9 +136,12 @@ export async function fileOne(p: Proposal, personId: number): Promise<void> {
       const { error } = await supabase.from('simchas').insert({
         person_id: personId,
         type: p.action as never,
-        // An engagement carries no date of its own -- that is the whole reason
-        // wedding_scheduled exists.
-        occurred_on: p.action === 'engagement' ? null : on,
+        // An engagement is dated the day it is heard about. It has no date of
+        // its own -- nobody records the hour a couple agreed -- but a row with
+        // no date at all never appears on the feed, because the feed asks for
+        // the last two years and a null is not in any range. The imported ones
+        // are invisible for exactly this reason.
+        occurred_on: on,
         wedding_on: p.action === 'wedding_scheduled' ? on : null,
         spouse_name: p.spouse ?? null,
         note: p.note ?? null,

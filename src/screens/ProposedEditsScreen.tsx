@@ -40,6 +40,19 @@ type Edit = {
 const pretty = (field: string) =>
   field.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
+type SimchaEdit = {
+  id: number;
+  simcha_id: number;
+  field: 'occurred_on' | 'wedding_on' | 'note';
+  new_value: string | null;
+  reason: string | null;
+  subtype: string;
+  current_date_value: string | null;
+  subject_name: string | null;
+  proposed_by: string;
+  created_at: string;
+};
+
 export default function ProposedEditsScreen({
   directory,
   onChanged,
@@ -51,6 +64,9 @@ export default function ProposedEditsScreen({
   const [who, setWho] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  // Suggestions about a simcha rather than a man: a wrong date, or the wedding
+  // date for an engagement that has been sitting without one.
+  const [simchaEdits, setSimchaEdits] = useState<SimchaEdit[]>([]);
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -78,9 +94,41 @@ export default function ProposedEditsScreen({
     }
   }, []);
 
+  const loadSimcha = useCallback(async () => {
+    const { data } = await (supabase as unknown as {
+      from: (t: string) => {
+        select: (c: string) => {
+          order: (c: string, o: object) => Promise<{ data: SimchaEdit[] | null }>;
+        };
+      };
+    })
+      .from('proposed_simcha_edits')
+      .select('*')
+      .order('created_at', { ascending: false });
+    setSimchaEdits(data ?? []);
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadSimcha();
+  }, [load, loadSimcha]);
+
+  async function decideSimcha(edit: SimchaEdit, approve: boolean) {
+    setBusy(edit.id);
+    try {
+      const { error } = await supabase.rpc('apply_simcha_edit' as never, {
+        p_edit_id: edit.id,
+        p_approve: approve,
+      } as never);
+      if (error) throw error;
+      await loadSimcha();
+      onChanged();
+    } catch (e) {
+      Alert.alert('Could not apply it', e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function decide(edit: Edit, approve: boolean) {
     setBusy(edit.id);
@@ -140,6 +188,57 @@ export default function ProposedEditsScreen({
       <Text style={styles.blurb}>
         Nothing here has changed his record. Approving is what writes it.
       </Text>
+
+      {simchaEdits.map((e) => (
+        <View key={`s${e.id}`} style={styles.card}>
+          <View style={styles.cardHead}>
+            <Text style={styles.name}>{e.subject_name}</Text>
+            <Text style={styles.meta}>{e.proposed_by}</Text>
+          </View>
+
+          <Text style={styles.what}>
+            {e.field === 'wedding_on' && e.subtype === 'engagement'
+              ? 'says the wedding is on'
+              : e.field === 'note'
+              ? 'suggests a note'
+              : 'says the date should be'}
+            {'  '}
+            <Text style={styles.newVal}>{e.new_value}</Text>
+          </Text>
+
+          {e.field === 'occurred_on' && e.current_date_value ? (
+            <Text style={styles.oldVal}>currently {e.current_date_value}</Text>
+          ) : null}
+          {e.reason ? <Text style={styles.reason}>“{e.reason}”</Text> : null}
+
+          {e.field === 'wedding_on' && e.subtype === 'engagement' ? (
+            <Text style={styles.reason}>
+              Approving adds the wedding and takes him off the "needs a date" list.
+            </Text>
+          ) : null}
+
+          <View style={styles.rowActions}>
+            <TouchableOpacity
+              style={[styles.btn, styles.btnYes]}
+              disabled={busy === e.id}
+              onPress={() => decideSimcha(e, true)}
+            >
+              {busy === e.id ? (
+                <ActivityIndicator size="small" color={colors.navy900} />
+              ) : (
+                <Text style={styles.btnYesText}>Accept</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.btn}
+              disabled={busy === e.id}
+              onPress={() => decideSimcha(e, false)}
+            >
+              <Text style={styles.btnText}>Refuse</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
 
       {byPerson.map(({ personId, items }) => {
         const person = directory?.byId.get(personId);
@@ -207,6 +306,10 @@ export default function ProposedEditsScreen({
 }
 
 const styles = StyleSheet.create({
+  what: { ...type.body, color: colors.muted },
+  newVal: { fontFamily: 'Poppins_600SemiBold', color: colors.cyan },
+  oldVal: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: colors.muted, opacity: 0.7 },
+  reason: { fontFamily: 'Poppins_400Regular', fontSize: 12.5, color: colors.muted, opacity: 0.85 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   pad: { padding: space.lg, gap: space.sm },
   errTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 17, color: colors.white },
