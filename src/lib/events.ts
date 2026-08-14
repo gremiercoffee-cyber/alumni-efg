@@ -73,10 +73,18 @@ export function rsvpLink(token: string): string | null {
   return origin ? `${origin}/rsvp/${token}` : null;
 }
 
-/** The token out of /rsvp/<token>, or null if this is a normal visit. */
+/**
+ * The token out of /rsvp/<token>, or null if this is a normal visit.
+ *
+ * Guarding on `typeof window` is the web idiom and it is wrong here: React
+ * Native defines `window`, it is `window.location` that is missing. Reading
+ * .pathname off it threw on the first render of every launch, which is a crash
+ * on the phone and nothing at all on the site.
+ */
 export function rsvpTokenFromUrl(): string | null {
-  if (typeof window === 'undefined') return null;
-  const m = /^\/rsvp\/([a-f0-9]{8,})\/?$/i.exec(window.location.pathname);
+  const path = typeof window !== 'undefined' ? window.location?.pathname : null;
+  if (!path) return null;
+  const m = /^\/rsvp\/([a-f0-9]{8,})\/?$/i.exec(path);
   return m ? m[1] : null;
 }
 
