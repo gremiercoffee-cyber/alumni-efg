@@ -41,6 +41,7 @@ import StaysScreen from './src/screens/StaysScreen';
 import EventsScreen from './src/screens/EventsScreen';
 import RsvpScreen from './src/screens/RsvpScreen';
 import SimchaSheet from './src/screens/SimchaSheet';
+import WaitingScreen from './src/screens/WaitingScreen';
 import { topInset } from './src/components/ui';
 import { colors, space, type } from './src/theme';
 
@@ -213,6 +214,22 @@ export default function App() {
     );
   }
 
+  // Signed in but not let in yet. Shown its own screen rather than the app with
+  // every query failing: RLS refuses a pending user everything, so what he used
+  // to get was "Could not load" and no idea why.
+  if (profile && profile.role === 'pending') {
+    return (
+      <>
+        <StatusBar style="light" />
+        <WaitingScreen
+          email={session.user.email ?? null}
+          claimedId={(profile as { claimed_staff_id?: number | null }).claimed_staff_id ?? null}
+          onClaimed={refresh}
+        />
+      </>
+    );
+  }
+
   const isAdmin = profile?.role === 'admin';
 
   // 'embedded' means the APK is still running the bundle it shipped with -- no
@@ -288,6 +305,7 @@ export default function App() {
             markNavigation();
             setEditing(true);
           }}
+          myStaffId={profile?.staff_id ?? null}
         />
       );
     }

@@ -29,6 +29,8 @@ type Waiting = {
   email: string | null;
   display_name: string | null;
   signed_up_at: string | null;
+  claimed_staff_id: number | null;
+  claimed_staff_name: string | null;
 };
 
 const ROLES: [string, string, string][] = [
@@ -48,7 +50,9 @@ export default function PendingUsersScreen({ onChanged }: { onChanged: () => voi
       .order('signed_up_at', { ascending: false });
     if (error) setError(error.message);
     else {
-      setRows((data ?? []) as Waiting[]);
+      // The generated types predate migration 0028, which adds the claim
+      // columns to this view.
+      setRows((data ?? []) as unknown as Waiting[]);
       setError(null);
     }
   }, []);
@@ -62,6 +66,10 @@ export default function PendingUsersScreen({ onChanged }: { onChanged: () => voi
     try {
       if (role) {
         const { error } = await supabase.rpc('set_user_role', {
+          // Approving also attaches him to the rebbe he said he was. Doing it
+          // in one call means he cannot be let in and left unlinked -- which
+          // would be a rebbe with no alumni and no weekly email.
+          p_staff_id: user.claimed_staff_id ?? null,
           p_user: user.id,
           p_role: role as never,
         });
@@ -113,6 +121,14 @@ export default function PendingUsersScreen({ onChanged }: { onChanged: () => voi
         <View key={u.id} style={styles.card}>
           <Text style={styles.name}>{u.display_name || u.email}</Text>
           {u.display_name && u.email ? <Text style={styles.email}>{u.email}</Text> : null}
+
+          {/* Who he says he is. The email rarely says it, and getting this wrong
+              hands one rebbe another's alumni. */}
+          <Text style={u.claimed_staff_name ? styles.claim : styles.claimNone}>
+            {u.claimed_staff_name
+              ? `Says he is ${u.claimed_staff_name}`
+              : 'Has not said which rebbe he is'}
+          </Text>
           {u.signed_up_at ? (
             <View style={styles.pills}>
               <Badge>
@@ -155,6 +171,14 @@ export default function PendingUsersScreen({ onChanged }: { onChanged: () => voi
 }
 
 const styles = StyleSheet.create({
+  claim: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: colors.cyan, marginTop: 4 },
+  claimNone: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 12.5,
+    color: colors.muted,
+    opacity: 0.75,
+    marginTop: 4,
+  },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   pad: { padding: space.lg, gap: space.sm },
   errTitle: { fontFamily: 'Poppins_600SemiBold', fontSize: 17, color: colors.white },
