@@ -53,6 +53,11 @@ const GROUPS: [string, FieldSpec[]][] = [
     { key: 'country', label: 'Country' },
   ]],
   ['LIFE', [
+    // Nothing in either old workbook recorded a birthday, so every one of these
+    // is typed in by hand. Written as a plain date rather than a picker because
+    // it is usually copied off a message, and a calendar 30 years back is a lot
+    // of tapping.
+    { key: 'birthday', label: 'Birthday (YYYY-MM-DD)' },
     { key: 'high_school', label: 'High school' },
     { key: 'college', label: 'College' },
     { key: 'grad_school', label: 'Graduate school' },

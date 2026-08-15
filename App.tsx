@@ -25,6 +25,7 @@ import * as Updates from 'expo-updates';
 import { markNavigation, useBack } from './src/lib/useBack';
 import { rsvpTokenFromUrl } from './src/lib/events';
 import { MineProvider } from './src/lib/mine';
+import { registerForPush } from './src/lib/push';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import SignInScreen from './src/screens/SignInScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -141,6 +142,13 @@ export default function App() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Once signed in, offer to register this device. Silent if refused: it was
+  // not asked for, so a failure must not look like a fault.
+  useEffect(() => {
+    if (!session) return;
+    void registerForPush();
+  }, [session]);
 
   // Back goes: open record -> the list it came from -> Home -> out of the app.
   // Returning false hands the press to the OS, which is what closes the app.

@@ -13,6 +13,12 @@ import type { Person } from './supabase';
 export type ProgramRebbe = { year: string; rebbe: string };
 
 export type AlumniRecord = Person & {
+  /**
+   * Added by migration 0029. Declared here rather than waiting on regenerated
+   * types, which needs CLI access to the project.
+   */
+  birthday?: string | null;
+
   name: string;
   aliases: string[];
   years: string[];
