@@ -6,6 +6,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { AlumniRecord, Directory } from '../lib/alumni';
 import { reachByEmail, reachByPhone } from '../lib/contact';
 import { labelFor, visualFor, type FeedItem } from '../lib/simchas';
+import { MineStar } from '../lib/mine';
 import { colors, radius, space, type } from '../theme';
 import { Chip, ChipRow, Empty } from '../components/ui';
 
@@ -263,6 +264,7 @@ function Row({
           rebbeim's own simchas have nobody to reach, so they get no buttons. */}
       {person ? (
         <View style={styles.actions}>
+          <MineStar personId={person.id} size={18} />
           <TouchableOpacity
             style={[styles.act, styles.actWa, (dnc || !person.phone) && styles.actOff]}
             disabled={dnc || !person.phone}

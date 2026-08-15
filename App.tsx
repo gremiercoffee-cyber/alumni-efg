@@ -24,6 +24,7 @@ import { cachedFeed, loadFeed, type FeedItem } from './src/lib/simchas';
 import * as Updates from 'expo-updates';
 import { markNavigation, useBack } from './src/lib/useBack';
 import { rsvpTokenFromUrl } from './src/lib/events';
+import { MineProvider } from './src/lib/mine';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import SignInScreen from './src/screens/SignInScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -305,7 +306,6 @@ export default function App() {
             markNavigation();
             setEditing(true);
           }}
-          myStaffId={profile?.staff_id ?? null}
         />
       );
     }
@@ -360,6 +360,11 @@ export default function App() {
   };
 
   return (
+    <MineProvider
+      staffId={profile?.staff_id ?? null}
+      directory={directory}
+      onChanged={refresh}
+    >
     <View style={styles.app}>
       <StatusBar style="light" />
 
@@ -492,6 +497,7 @@ export default function App() {
         ))}
       </View>
     </View>
+    </MineProvider>
   );
 }
 

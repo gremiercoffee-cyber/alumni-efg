@@ -27,6 +27,9 @@ export const colors = {
   // WhatsApp's own green. Used only for their mark, so the button is
   // recognisable as WhatsApp rather than as one more cyan control.
   whatsapp: '#25D366',
+  // A filled star is a claim, not a status, so it gets its own warm colour
+  // rather than the cyan that already means 'selected' everywhere else.
+  star: '#ffd166',
 
   good: '#2fe0d2',
   warn: '#ffd166',

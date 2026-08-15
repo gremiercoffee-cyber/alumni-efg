@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Badge, Prose, Section } from '../components/ui';
 import type { AlumniRecord } from '../lib/alumni';
 import { reachByEmail, reachByPhone } from '../lib/contact';
-import { supabase } from '../lib/supabase';
+import { MineStar } from '../lib/mine';
 import { colors, radius, space, type } from '../theme';
 
 export default function PersonScreen({
@@ -13,49 +13,14 @@ export default function PersonScreen({
   onBack,
   onContacted,
   onEdit,
-  myStaffId,
 }: {
   person: AlumniRecord;
   onBack: () => void;
   onContacted: () => void;
   onEdit: () => void;
-  myStaffId: number | null;
 }) {
   const dnc = person.do_not_contact;
 
-  // Whether he is on my list. Held locally so the star responds at once; the
-  // directory catches up on the next refresh.
-  const [mine, setMine] = useState(!!(person as { mine?: boolean }).mine);
-  const [saving, setSaving] = useState(false);
-
-  /**
-   * Claim him, or let him go.
-   *
-   * A rebbe curating his own list needs no approval -- the policy has always
-   * allowed it, there was simply nowhere to press. Being close with a man is
-   * his own knowledge, and it is what decides whose weekly five he appears in.
-   */
-  async function toggleMine() {
-    if (!myStaffId) return;
-    setSaving(true);
-    const next = !mine;
-    setMine(next);
-    const { error } = next
-      ? await supabase
-          .from('staff_connections')
-          .insert({ staff_id: myStaffId, person_id: person.id })
-      : await supabase
-          .from('staff_connections')
-          .delete()
-          .eq('staff_id', myStaffId)
-          .eq('person_id', person.id);
-    setSaving(false);
-    if (error && !error.message.includes('duplicate')) {
-      setMine(!next);
-      return;
-    }
-    onContacted();
-  }
   const life = [
     person.college,
     person.occupation,
@@ -75,6 +40,7 @@ export default function PersonScreen({
         <View style={styles.head}>
           <View style={styles.nameRow}>
             <Text style={styles.name}>{person.name}</Text>
+            <MineStar personId={person.id} size={22} />
             <TouchableOpacity onPress={onEdit} hitSlop={10} accessibilityLabel="Edit his details">
               <MaterialIcons name="edit" size={19} color={colors.cyan} />
             </TouchableOpacity>
@@ -82,23 +48,6 @@ export default function PersonScreen({
           {person.aliases.length ? (
             <Text style={styles.alias}>also recorded as {person.aliases.join(', ')}</Text>
           ) : null}
-          {myStaffId ? (
-            <TouchableOpacity
-              style={[styles.mine, mine && styles.mineOn]}
-              onPress={toggleMine}
-              disabled={saving}
-            >
-              <MaterialIcons
-                name={mine ? 'star' : 'star-outline'}
-                size={17}
-                color={mine ? colors.navy900 : colors.cyan}
-              />
-              <Text style={[styles.mineText, mine && styles.mineTextOn]}>
-                {mine ? "One of my guys" : "Mark as one of my guys"}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-
           <View style={styles.badges}>
             {person.levels.map((l) => (
               <Badge key={l} tone="cyan">{l}</Badge>
@@ -224,21 +173,6 @@ export default function PersonScreen({
 }
 
 const styles = StyleSheet.create({
-  mine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 7,
-    marginTop: space.sm,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.cyan,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-  },
-  mineOn: { backgroundColor: colors.cyan },
-  mineText: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: colors.cyan },
-  mineTextOn: { color: colors.navy900 },
   flex: { flex: 1 },
   back: { paddingHorizontal: space.md, paddingBottom: space.sm },
   backText: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: colors.cyan },

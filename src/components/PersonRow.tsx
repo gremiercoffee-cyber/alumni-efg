@@ -5,6 +5,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { AlumniRecord } from '../lib/alumni';
 import { yearRange } from '../lib/alumni';
 import { reachByEmail, reachByPhone } from '../lib/contact';
+import { MineStar } from '../lib/mine';
 import { colors, radius, space, type } from '../theme';
 import { Avatar } from './ui';
 
@@ -48,6 +49,7 @@ export default function PersonRow({
       </TouchableOpacity>
 
       <View style={styles.quick}>
+        <MineStar personId={person.id} size={19} />
         <TouchableOpacity
           style={[styles.qb, styles.qbWa, (dnc || !person.phone) && styles.qbOff]}
           disabled={dnc || !person.phone}
