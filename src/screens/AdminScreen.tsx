@@ -53,7 +53,7 @@ type QueueRow = {
 const GROUPS: [QueueRow['kind'], string, string][] = [
   ['needs_bed', 'NEEDS A BED', 'Staying in the yeshiva with nowhere to sleep yet.'],
   ['awaiting_date', 'SET A WEDDING DATE', 'Engaged, but nobody has recorded when the wedding is.'],
-  ['announce', 'SEND THE MAZAL TOV', 'Happened, and the announcement has not gone out.'],
+  ['announce', 'SEND THE MAZAL TOV', 'Over and done with. The announcement has not gone out.'],
 ];
 
 /** Days from today to a date, negative for the past. */
@@ -245,7 +245,16 @@ export default function AdminScreen({
       {!rows.length ? <Empty>Nothing waiting on you.</Empty> : null}
 
       {GROUPS.map(([kind, title, blurb]) => {
-        const group = rows.filter((r) => r.kind === kind);
+        const group = rows.filter((r) => {
+          if (r.kind !== kind) return false;
+          // The Mazal Tov waits until the day after. On the day itself he is
+          // at his own wedding and the message would land in the middle of it;
+          // the morning after is when people want to hear, and when he might
+          // actually read it. The queue offers it from the day of, so the last
+          // day is held back here.
+          if (kind === 'announce' && daysTo(r.on_date) >= 0) return false;
+          return true;
+        });
         if (!group.length) return null;
         return (
           <View key={kind}>
