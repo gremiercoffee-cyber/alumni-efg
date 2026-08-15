@@ -25,6 +25,7 @@ import * as Updates from 'expo-updates';
 import { markNavigation, useBack } from './src/lib/useBack';
 import { rsvpTokenFromUrl } from './src/lib/events';
 import { MineProvider } from './src/lib/mine';
+import { errText, isAuthFailure } from './src/lib/errors';
 import { registerForPush } from './src/lib/push';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import SignInScreen from './src/screens/SignInScreen';
@@ -103,6 +104,23 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  /**
+   * A load failed.
+   *
+   * A dead session is not a data problem, and showing it as one is what made
+   * this take a round of guessing: every screen said "Could not load" with a
+   * Try again button that could never work, because the token was the thing
+   * that was broken. Signing out puts the sign-in screen up instead, which is
+   * the only action that actually helps.
+   */
+  const fail = useCallback((e: unknown) => {
+    if (isAuthFailure(e)) {
+      void supabase.auth.signOut();
+      return;
+    }
+    setLoadError(errText(e, 'Could not load.'));
+  }, []);
+
   const refresh = useCallback(async () => {
     if (!session) return;
     setLoadError(null);
@@ -111,9 +129,7 @@ export default function App() {
     // so nothing is allowed to queue in front of it. It used to wait for the
     // profile round trip and then for the directory -- 724 people across eight
     // queries -- before a single row could paint.
-    const feedDone = loadFeed()
-      .then(setFeed)
-      .catch((e) => setLoadError(e instanceof Error ? e.message : 'Could not load.'));
+    const feedDone = loadFeed().then(setFeed).catch(fail);
 
     // The directory needs the profile only for `mine`, which is a filter, so it
     // is fetched alongside rather than ahead.
@@ -125,10 +141,10 @@ export default function App() {
         .maybeSingle();
       setProfile(prof ?? null);
       setDirectory(await loadDirectory(prof?.staff_id ?? null));
-    })().catch((e) => setLoadError(e instanceof Error ? e.message : 'Could not load.'));
+    })().catch(fail);
 
     await Promise.all([feedDone, dirDone]);
-  }, [session]);
+  }, [session, fail]);
 
   // Paint whatever was on screen last time, straight away, while the live copy
   // is on its way. Only if nothing has arrived yet -- a stale feed must never
