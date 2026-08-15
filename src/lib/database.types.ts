@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          birthday_emails_enabled: boolean
+          emails_enabled: boolean
+          from_email: string
+          from_name: string
+          id: boolean
+          list_email: string | null
+          push_enabled: boolean
+          redirect_all_to: string | null
+          updated_at: string
+          wedding_emails_enabled: boolean
+        }
+        Insert: {
+          birthday_emails_enabled?: boolean
+          emails_enabled?: boolean
+          from_email?: string
+          from_name?: string
+          id?: boolean
+          list_email?: string | null
+          push_enabled?: boolean
+          redirect_all_to?: string | null
+          updated_at?: string
+          wedding_emails_enabled?: boolean
+        }
+        Update: {
+          birthday_emails_enabled?: boolean
+          emails_enabled?: boolean
+          from_email?: string
+          from_name?: string
+          id?: boolean
+          list_email?: string | null
+          push_enabled?: boolean
+          redirect_all_to?: string | null
+          updated_at?: string
+          wedding_emails_enabled?: boolean
+        }
+        Relationships: []
+      }
       claim_reports: {
         Row: {
           claim_id: number
@@ -120,6 +159,20 @@ export type Database = {
             referencedColumns: ["person_id"]
           },
           {
+            foreignKeyName: "claims_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "claims_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+          {
             foreignKeyName: "claims_reviewed_by_fkey"
             columns: ["reviewed_by"]
             isOneToOne: false
@@ -137,7 +190,95 @@ export type Database = {
             foreignKeyName: "claims_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
+            foreignKeyName: "claims_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
             referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_choices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      digest_sent: {
+        Row: {
+          cycle: number
+          id: number
+          person_id: number
+          sent_on: string
+          staff_id: number
+        }
+        Insert: {
+          cycle: number
+          id?: number
+          person_id: number
+          sent_on?: string
+          staff_id: number
+        }
+        Update: {
+          cycle?: number
+          id?: number
+          person_id?: number
+          sent_on?: string
+          staff_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "digest_sent_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "digest_sent_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "digest_sent_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "digest_sent_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "digest_sent_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
+            foreignKeyName: "digest_sent_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "digest_sent_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_choices"
             referencedColumns: ["id"]
           },
         ]
@@ -180,10 +321,38 @@ export type Database = {
             referencedColumns: ["person_id"]
           },
           {
+            foreignKeyName: "enrollments_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "enrollments_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "enrollments_rebbe_id_fkey"
+            columns: ["rebbe_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
             foreignKeyName: "enrollments_rebbe_id_fkey"
             columns: ["rebbe_id"]
             isOneToOne: false
             referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrollments_rebbe_id_fkey"
+            columns: ["rebbe_id"]
+            isOneToOne: false
+            referencedRelation: "staff_choices"
             referencedColumns: ["id"]
           },
         ]
@@ -243,6 +412,20 @@ export type Database = {
             columns: ["person_id"]
             isOneToOne: false
             referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "event_attendance_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "event_attendance_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
             referencedColumns: ["person_id"]
           },
         ]
@@ -350,6 +533,20 @@ export type Database = {
             referencedRelation: "person_last_contact"
             referencedColumns: ["person_id"]
           },
+          {
+            foreignKeyName: "family_contacts_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "family_contacts_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
         ]
       }
       interactions: {
@@ -405,6 +602,20 @@ export type Database = {
             referencedColumns: ["person_id"]
           },
           {
+            foreignKeyName: "interactions_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "interactions_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+          {
             foreignKeyName: "interactions_recorded_by_fkey"
             columns: ["recorded_by"]
             isOneToOne: false
@@ -422,7 +633,21 @@ export type Database = {
             foreignKeyName: "interactions_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
+            foreignKeyName: "interactions_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
             referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interactions_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_choices"
             referencedColumns: ["id"]
           },
         ]
@@ -533,6 +758,20 @@ export type Database = {
             referencedRelation: "person_last_contact"
             referencedColumns: ["person_id"]
           },
+          {
+            foreignKeyName: "notification_outbox_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "notification_outbox_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
         ]
       }
       notification_recipients: {
@@ -588,7 +827,21 @@ export type Database = {
             foreignKeyName: "notification_recipients_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
+            foreignKeyName: "notification_recipients_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
             referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_recipients_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_choices"
             referencedColumns: ["id"]
           },
         ]
@@ -596,6 +849,7 @@ export type Database = {
       people: {
         Row: {
           aish_impact: string | null
+          birthday: string | null
           city: string | null
           college: string | null
           contact_updated_on: string | null
@@ -627,6 +881,7 @@ export type Database = {
         }
         Insert: {
           aish_impact?: string | null
+          birthday?: string | null
           city?: string | null
           college?: string | null
           contact_updated_on?: string | null
@@ -658,6 +913,7 @@ export type Database = {
         }
         Update: {
           aish_impact?: string | null
+          birthday?: string | null
           city?: string | null
           college?: string | null
           contact_updated_on?: string | null
@@ -717,6 +973,20 @@ export type Database = {
             referencedRelation: "person_last_contact"
             referencedColumns: ["person_id"]
           },
+          {
+            foreignKeyName: "person_aliases_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "person_aliases_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
         ]
       }
       person_edits: {
@@ -772,6 +1042,20 @@ export type Database = {
             referencedColumns: ["person_id"]
           },
           {
+            foreignKeyName: "person_edits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "person_edits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+          {
             foreignKeyName: "person_edits_reviewed_by_fkey"
             columns: ["reviewed_by"]
             isOneToOne: false
@@ -803,6 +1087,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          claimed_staff_id: number | null
           created_at: string
           display_name: string | null
           id: string
@@ -810,6 +1095,7 @@ export type Database = {
           staff_id: number | null
         }
         Insert: {
+          claimed_staff_id?: number | null
           created_at?: string
           display_name?: string | null
           id: string
@@ -817,6 +1103,7 @@ export type Database = {
           staff_id?: number | null
         }
         Update: {
+          claimed_staff_id?: number | null
           created_at?: string
           display_name?: string | null
           id?: string
@@ -825,10 +1112,45 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "profiles_claimed_staff_id_fkey"
+            columns: ["claimed_staff_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
+            foreignKeyName: "profiles_claimed_staff_id_fkey"
+            columns: ["claimed_staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_claimed_staff_id_fkey"
+            columns: ["claimed_staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_choices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: true
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
             foreignKeyName: "profiles_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: true
             referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: true
+            referencedRelation: "staff_choices"
             referencedColumns: ["id"]
           },
         ]
@@ -866,6 +1188,88 @@ export type Database = {
           {
             foreignKeyName: "push_tokens_profile_id_fkey"
             columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      simcha_edits: {
+        Row: {
+          created_at: string
+          field: string
+          id: number
+          new_value: string | null
+          reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          simcha_id: number
+          status: Database["public"]["Enums"]["claim_status"]
+          submitted_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          field: string
+          id?: number
+          new_value?: string | null
+          reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          simcha_id: number
+          status?: Database["public"]["Enums"]["claim_status"]
+          submitted_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          field?: string
+          id?: number
+          new_value?: string | null
+          reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          simcha_id?: number
+          status?: Database["public"]["Enums"]["claim_status"]
+          submitted_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "simcha_edits_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "pending_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simcha_edits_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simcha_edits_simcha_id_fkey"
+            columns: ["simcha_id"]
+            isOneToOne: false
+            referencedRelation: "engagements_awaiting_date"
+            referencedColumns: ["engagement_id"]
+          },
+          {
+            foreignKeyName: "simcha_edits_simcha_id_fkey"
+            columns: ["simcha_id"]
+            isOneToOne: false
+            referencedRelation: "simchas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simcha_edits_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "pending_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simcha_edits_submitted_by_fkey"
+            columns: ["submitted_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -976,10 +1380,38 @@ export type Database = {
             referencedColumns: ["person_id"]
           },
           {
+            foreignKeyName: "simchas_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "simchas_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "simchas_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
             foreignKeyName: "simchas_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simchas_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_choices"
             referencedColumns: ["id"]
           },
         ]
@@ -1052,10 +1484,38 @@ export type Database = {
             referencedColumns: ["person_id"]
           },
           {
+            foreignKeyName: "staff_connections_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "staff_connections_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "staff_connections_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
             foreignKeyName: "staff_connections_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_connections_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_choices"
             referencedColumns: ["id"]
           },
         ]
@@ -1119,6 +1579,20 @@ export type Database = {
             columns: ["person_id"]
             isOneToOne: false
             referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "visits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "visits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
             referencedColumns: ["person_id"]
           },
           {
@@ -1224,10 +1698,38 @@ export type Database = {
             referencedColumns: ["person_id"]
           },
           {
+            foreignKeyName: "simchas_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "simchas_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "simchas_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
             foreignKeyName: "simchas_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simchas_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_choices"
             referencedColumns: ["id"]
           },
         ]
@@ -1275,6 +1777,20 @@ export type Database = {
             referencedRelation: "person_last_contact"
             referencedColumns: ["person_id"]
           },
+          {
+            foreignKeyName: "event_attendance_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "event_attendance_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
         ]
       }
       event_summary: {
@@ -1315,18 +1831,111 @@ export type Database = {
       pending_users: {
         Row: {
           avatar_url: string | null
+          claimed_staff_id: number | null
+          claimed_staff_name: string | null
           display_name: string | null
           email: string | null
           id: string | null
           signed_up_at: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_claimed_staff_id_fkey"
+            columns: ["claimed_staff_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
+            foreignKeyName: "profiles_claimed_staff_id_fkey"
+            columns: ["claimed_staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_claimed_staff_id_fkey"
+            columns: ["claimed_staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_choices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       person_last_contact: {
         Row: {
           contact_count: number | null
           last_contacted_on: string | null
           person_id: number | null
+        }
+        Relationships: []
+      }
+      proposed_simcha_edits: {
+        Row: {
+          created_at: string | null
+          current_date_value: string | null
+          current_note: string | null
+          field: string | null
+          id: number | null
+          new_value: string | null
+          person_id: number | null
+          proposed_by: string | null
+          reason: string | null
+          simcha_id: number | null
+          subject_name: string | null
+          subtype: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "simcha_edits_simcha_id_fkey"
+            columns: ["simcha_id"]
+            isOneToOne: false
+            referencedRelation: "engagements_awaiting_date"
+            referencedColumns: ["engagement_id"]
+          },
+          {
+            foreignKeyName: "simcha_edits_simcha_id_fkey"
+            columns: ["simcha_id"]
+            isOneToOne: false
+            referencedRelation: "simchas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simchas_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "simchas_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "simchas_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "simchas_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+        ]
+      }
+      rebbe_alumni: {
+        Row: {
+          email: string | null
+          person_id: number | null
+          staff_id: number | null
+          staff_name: string | null
         }
         Relationships: []
       }
@@ -1358,13 +1967,59 @@ export type Database = {
             referencedColumns: ["person_id"]
           },
           {
+            foreignKeyName: "claims_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "claims_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "claims_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["staff_id"]
+          },
+          {
             foreignKeyName: "claims_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "staff"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "claims_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_choices"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      staff_choices: {
+        Row: {
+          id: number | null
+          name: string | null
+          title: string | null
+        }
+        Insert: {
+          id?: number | null
+          name?: string | null
+          title?: string | null
+        }
+        Update: {
+          id?: number | null
+          name?: string | null
+          title?: string | null
+        }
+        Relationships: []
       }
       stay_nights: {
         Row: {
@@ -1391,6 +2046,20 @@ export type Database = {
             columns: ["person_id"]
             isOneToOne: false
             referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "visits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "visits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
             referencedColumns: ["person_id"]
           },
         ]
@@ -1420,7 +2089,33 @@ export type Database = {
             referencedRelation: "person_last_contact"
             referencedColumns: ["person_id"]
           },
+          {
+            foreignKeyName: "visits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "visits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
         ]
+      }
+      upcoming_birthdays: {
+        Row: {
+          birthday: string | null
+          email: string | null
+          name: string | null
+          next_on: string | null
+          person_id: number | null
+          phone: string | null
+          turning: number | null
+        }
+        Relationships: []
       }
     }
     Functions: {
@@ -1429,10 +2124,15 @@ export type Database = {
         Args: { p_approve: boolean; p_edit_id: number }
         Returns: undefined
       }
+      apply_simcha_edit: {
+        Args: { p_approve: boolean; p_edit_id: number }
+        Returns: undefined
+      }
       attach_rsvp: {
         Args: { p_attendance_id: number; p_person_id: number }
         Returns: undefined
       }
+      claim_staff: { Args: { p_staff_id: number }; Returns: undefined }
       current_staff_id: { Args: never; Returns: number }
       editable_person_fields: { Args: never; Returns: string[] }
       fan_out_notification: { Args: { p_outbox_id: number }; Returns: number }
@@ -1442,6 +2142,13 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      pick_weekly_five: {
+        Args: { p_count?: number; p_staff_id: number }
+        Returns: {
+          person_id: number
+        }[]
+      }
+      queue_due_notifications: { Args: never; Returns: number }
       reset_rsvp_token: { Args: { p_event_id: number }; Returns: string }
       rsvp_event: {
         Args: { p_token: string }
@@ -1453,13 +2160,22 @@ export type Database = {
           starts_on: string
         }[]
       }
-      set_user_role: {
-        Args: {
-          p_role: Database["public"]["Enums"]["user_role"]
-          p_user: string
-        }
-        Returns: undefined
-      }
+      set_user_role:
+        | {
+            Args: {
+              p_role: Database["public"]["Enums"]["user_role"]
+              p_user: string
+            }
+            Returns: undefined
+          }
+        | {
+            Args: {
+              p_role: Database["public"]["Enums"]["user_role"]
+              p_staff_id?: number
+              p_user: string
+            }
+            Returns: undefined
+          }
       submit_rsvp: {
         Args: {
           p_email: string

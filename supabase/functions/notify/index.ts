@@ -99,7 +99,24 @@ async function push(tokens: string[], title: string, body: string) {
   }
 }
 
+/**
+ * Only the scheduler may run this.
+ *
+ * The function is deployed without JWT checking, because the cron job calls it
+ * with no user -- which leaves the URL open to anyone who learns it. Sending is
+ * idempotent, so the damage is bounded, but "bounded" is not "none": once mail
+ * is switched on, a stranger could decide when the yeshiva emails its alumni.
+ */
+function authorised(req: Request): boolean {
+  const expected = Deno.env.get('CRON_SECRET');
+  if (!expected) return true; // Not configured yet; fail open rather than dead.
+  return req.headers.get('x-cron-secret') === expected;
+}
+
 Deno.serve(async (req) => {
+  if (!authorised(req)) {
+    return Response.json({ error: 'not authorised' }, { status: 401 });
+  }
   const opts = await req.json().catch(() => ({}));
   const dryRun = opts?.dry_run === true;
 
