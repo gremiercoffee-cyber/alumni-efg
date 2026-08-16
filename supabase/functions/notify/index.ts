@@ -27,6 +27,26 @@ const esc = (s: string) =>
 
 const SITE = Deno.env.get('SITE_URL') ?? 'https://efg-alumni.gremiercoffee.workers.dev';
 
+/**
+ * The hour in Jerusalem, right now.
+ *
+ * Cron speaks UTC and Israel moves an hour twice a year, so a fixed UTC time is
+ * 9am for half the year and 10am for the rest. The job runs hourly instead and
+ * this decides whether it is time. Queueing is idempotent, so the runs that are
+ * not the hour cost nothing.
+ */
+function jerusalemHour(): number {
+  return Number(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Jerusalem',
+      hour: 'numeric',
+      hour12: false,
+    }).format(new Date()),
+  );
+}
+
+const SEND_HOUR = 9;
+
 function shell(title: string, body: string) {
   return `<!doctype html><html><body style="margin:0;background:#0a1733;padding:24px 12px;">
   <table role="presentation" width="100%" style="max-width:520px;margin:0 auto;background:#0f1f42;border-radius:14px;padding:22px;">
@@ -131,11 +151,26 @@ Deno.serve(async (req) => {
     .from('notification_outbox')
     .select('*')
     .is('sent_at', null)
-    .in('kind', ['wedding_week_before', 'wedding_today', 'birthday_today'])
+    .in('kind', [
+      'wedding_week_before',
+      'wedding_today',
+      'wedding_day_after',
+      'birthday_today',
+    ])
     .order('created_at');
 
   const { data: tokenRows } = await admin.from('push_tokens').select('token');
   const tokens = (tokenRows ?? []).map((t: { token: string }) => t.token);
+
+  // The Mazal Tov reminder is a job rather than news, so it goes only to
+  // whoever will actually send the announcement.
+  const { data: adminRows } = await admin.from('admin_push_tokens').select('token');
+  const adminTokens = (adminRows ?? []).map((t: { token: string }) => t.token);
+
+  // Everything waits for 9am in Jerusalem. A reminder at 3am is a reminder
+  // nobody sees, and one that wakes people is worse than none.
+  const rightHour = jerusalemHour() === SEND_HOUR;
+  const hold = !rightHour && !opts?.force;
 
   const done: unknown[] = [];
 
@@ -159,6 +194,10 @@ Deno.serve(async (req) => {
       subject = `Mazal tov — ${name} is getting married today`;
       title = 'Mazal tov';
       body = `${name} is getting married today.`;
+    } else if (row.kind === 'wedding_day_after') {
+      subject = `Send the Mazal Tov for ${name}`;
+      title = 'Send the Mazal Tov';
+      body = `${name} got married yesterday. It is in your To Do list.`;
     } else {
       subject = `${name}'s birthday is today`;
       title = 'A birthday today';
@@ -166,25 +205,32 @@ Deno.serve(async (req) => {
     }
 
     const isBirthday = row.kind === 'birthday_today';
+    const adminOnly = row.kind === 'wedding_day_after';
+
+    // Admin-only means admin-only: no list email, whatever the switches say.
+    // Telling everyone to send the Mazal Tov is not the same as sending it.
     const emailOn =
+      !adminOnly &&
       s.emails_enabled &&
       (isBirthday ? s.birthday_emails_enabled : s.wedding_emails_enabled);
-    const to = s.redirect_all_to || s.list_email;
+    const to = emailOn ? s.redirect_all_to || s.list_email : null;
+    const audience = adminOnly ? adminTokens : tokens;
 
     const plan = {
       kind: row.kind,
       who: name,
-      email_to: emailOn && to ? to : null,
-      push_to: s.push_enabled ? tokens.length : 0,
+      email_to: to,
+      push_to: s.push_enabled ? audience.length : 0,
+      held_until_9am: hold,
     };
     done.push(plan);
 
-    if (dryRun) continue;
+    if (dryRun || hold) continue;
 
     let failed: string | null = null;
     try {
-      if (emailOn && to) await sendMail(to, subject, shell(title, para(body)));
-      if (s.push_enabled && tokens.length) await push(tokens, title, body);
+      if (to) await sendMail(to, subject, shell(title, para(body)));
+      if (s.push_enabled && audience.length) await push(audience, title, body);
     } catch (e) {
       failed = e instanceof Error ? e.message : String(e);
     }
@@ -192,7 +238,7 @@ Deno.serve(async (req) => {
     // Only stamped when something actually went out. A row nobody was
     // configured to receive stays pending, so turning a switch on later
     // delivers it rather than silently skipping it.
-    if (!failed && ((emailOn && to) || (s.push_enabled && tokens.length))) {
+    if (!failed && (to || (s.push_enabled && audience.length))) {
       await admin
         .from('notification_outbox')
         .update({ sent_at: new Date().toISOString() })
@@ -208,7 +254,7 @@ Deno.serve(async (req) => {
   // Sunday: everyone with a birthday in the next 30 days, in one email.
   let birthdayDigest: unknown = null;
   const isSunday = new Date().getUTCDay() === 0;
-  if (isSunday || opts?.force_birthday_digest) {
+  if ((isSunday && !hold) || opts?.force_birthday_digest) {
     const { data: soon } = await admin
       .from('upcoming_birthdays')
       .select('*')
@@ -245,6 +291,9 @@ Deno.serve(async (req) => {
     emails_on: s.emails_enabled,
     list_email: s.list_email,
     push_devices: tokens.length,
+    admin_devices: adminTokens.length,
+    jerusalem_hour: jerusalemHour(),
+    holding_until_9am: hold,
     items: done,
     birthday_digest: birthdayDigest,
   });
