@@ -30,3 +30,8 @@ ios/
 # Local gradle build output
 build.log
 build.err
+
+# Firebase config for the Android build. Not secret -- it ships inside every
+# APK -- but the repository is public and there is no reason to publish the
+# project identifiers. A CI build needs it supplied as a secret.
+google-services.json
