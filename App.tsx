@@ -27,6 +27,7 @@ import { rsvpTokenFromUrl } from './src/lib/events';
 import { MineProvider } from './src/lib/mine';
 import { errText, isAuthFailure } from './src/lib/errors';
 import { registerForPush } from './src/lib/push';
+import { syncWeddingReminders } from './src/lib/reminders';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import SignInScreen from './src/screens/SignInScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -165,6 +166,14 @@ export default function App() {
     if (!session) return;
     void registerForPush();
   }, [session]);
+
+  // Set the phone's own alarms for weddings already recorded. Re-run whenever
+  // the feed changes, so recording one sets its reminder there and then rather
+  // than waiting for the next launch.
+  useEffect(() => {
+    if (!profile) return;
+    void syncWeddingReminders(profile.role === 'admin');
+  }, [profile, feed]);
 
   // Back goes: open record -> the list it came from -> Home -> out of the app.
   // Returning false hands the press to the OS, which is what closes the app.
