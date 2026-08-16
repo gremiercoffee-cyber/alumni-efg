@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { pushStatus, type PushState } from '../lib/push';
 import { colors, radius, space, type } from '../theme';
 import { topInset } from '../components/ui';
 
@@ -88,6 +89,13 @@ export default function AdminDrawer({
   onSignOut: () => void;
   email: string | null;
 }) {
+  const [push, setPush] = useState<{ state: PushState; detail?: string } | null>(null);
+
+  // Checked when the drawer opens, not on every render.
+  useEffect(() => {
+    if (!visible) return;
+    void pushStatus().then(setPush);
+  }, [visible]);
   const { width } = useWindowDimensions();
   const panelWidth = Math.min(width * 0.82, 320);
   const slide = useRef(new Animated.Value(-panelWidth)).current;
@@ -137,6 +145,30 @@ export default function AdminDrawer({
             ))}
           </ScrollView>
 
+          {/* Whether this phone will actually be told anything. Silence was the
+              right default at launch and the wrong answer to someone checking. */}
+          <TouchableOpacity
+            style={styles.pushRow}
+            onPress={async () => {
+              setPush(null);
+              const r = await pushStatus();
+              setPush(r);
+            }}
+          >
+            <MaterialCommunityIcons
+              name={push?.state === 'registered' ? 'bell-check-outline' : 'bell-off-outline'}
+              size={16}
+              color={push?.state === 'registered' ? colors.cyan : colors.muted}
+            />
+            <Text style={styles.pushText}>
+              {push === null
+                ? 'Checking notifications…'
+                : push.state === 'registered'
+                ? 'Notifications on for this phone'
+                : push.detail ?? 'Notifications are off'}
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.signOut} onPress={onSignOut}>
             <MaterialCommunityIcons name="logout" size={18} color={colors.muted} />
             <Text style={styles.signOutText}>Sign out</Text>
@@ -150,6 +182,14 @@ export default function AdminDrawer({
 }
 
 const styles = StyleSheet.create({
+  pushRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: space.md,
+  },
+  pushText: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: colors.muted, flex: 1 },
   backdrop: { flex: 1, flexDirection: 'row', backgroundColor: 'rgba(3,9,26,0.55)' },
   rest: { flex: 1 },
   panel: {

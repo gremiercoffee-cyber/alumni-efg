@@ -77,3 +77,45 @@ export async function registerForPush(): Promise<string | null> {
     return null;
   }
 }
+
+
+export type PushState =
+  | 'registered'
+  | 'refused'
+  | 'unsupported'
+  | 'failed';
+
+/**
+ * The same registration, but it says what happened.
+ *
+ * registerForPush() swallows everything on purpose -- it runs on launch and
+ * nobody asked for it. That silence is right there and wrong here: when someone
+ * deliberately checks whether notifications work, "nothing" is not an answer.
+ */
+export async function pushStatus(): Promise<{ state: PushState; detail?: string }> {
+  if (Platform.OS === 'web') {
+    return { state: 'unsupported', detail: 'The website cannot receive push notifications.' };
+  }
+  try {
+    const perms = await Notifications.getPermissionsAsync();
+    if (!perms.granted) {
+      const asked = perms.canAskAgain
+        ? await Notifications.requestPermissionsAsync()
+        : perms;
+      if (!asked.granted) {
+        return {
+          state: 'refused',
+          detail: perms.canAskAgain
+            ? 'You said no. Tap to be asked again.'
+            : 'Turn them on in Settings, Apps, EFG Alumni, Notifications.',
+        };
+      }
+    }
+    const token = await registerForPush();
+    return token
+      ? { state: 'registered' }
+      : { state: 'failed', detail: 'Permission is on, but this device could not be registered.' };
+  } catch (e) {
+    return { state: 'failed', detail: e instanceof Error ? e.message : 'Unknown error' };
+  }
+}
