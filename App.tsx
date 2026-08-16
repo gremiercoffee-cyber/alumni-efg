@@ -53,7 +53,7 @@ type Tab = 'home' | 'report' | 'contacts' | 'mine' | 'admin';
 const TABS: [Tab, string, string][] = [
   ['home', '\u{1F3E0}', 'Home'],
   ['report', '\u{2795}', 'Report'],
-  ['contacts', '\u{1F4C7}', 'Contacts'],
+  ['contacts', '\u{1F4C7}', 'All alumni'],
   ['mine', '\u{2B50}', 'My alumni'],
 ];
 
