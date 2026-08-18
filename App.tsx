@@ -27,7 +27,7 @@ import { rsvpTokenFromUrl } from './src/lib/events';
 import { MineProvider } from './src/lib/mine';
 import { errText, isAuthFailure } from './src/lib/errors';
 import { registerForPush } from './src/lib/push';
-import { syncWeddingReminders } from './src/lib/reminders';
+import { clearLocalReminders } from './src/lib/reminders';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import SignInScreen from './src/screens/SignInScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -167,13 +167,17 @@ export default function App() {
     void registerForPush();
   }, [session]);
 
-  // Set the phone's own alarms for weddings already recorded. Re-run whenever
-  // the feed changes, so recording one sets its reminder there and then rather
-  // than waiting for the next launch.
+  // Clear any alarms the phone set for itself before push worked.
+  //
+  // They were the answer while Expo had no Firebase credentials and no server
+  // could reach the device. Now one can, and the server has no blind spot the
+  // phone had: it does not need the app to have been opened between a wedding
+  // being recorded and the morning after. Leaving both would mean two
+  // notifications for one wedding.
   useEffect(() => {
     if (!profile) return;
-    void syncWeddingReminders(profile.role === 'admin');
-  }, [profile, feed]);
+    void clearLocalReminders();
+  }, [profile]);
 
   // Back goes: open record -> the list it came from -> Home -> out of the app.
   // Returning false hands the press to the OS, which is what closes the app.

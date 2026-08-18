@@ -45,6 +45,19 @@ function morningAfter(dateIso: string): Date {
  * out which of yesterday's alarms still apply is more code and more ways to end
  * up with two notifications for one wedding.
  */
+export async function clearLocalReminders(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch {
+    // Nothing to do about it, and nothing worth telling anyone.
+  }
+}
+
+/**
+ * Superseded by server push, and kept because the reasoning may be needed
+ * again: this is what to do when a server cannot reach the device.
+ */
 export async function syncWeddingReminders(isAdmin: boolean): Promise<number> {
   if (Platform.OS === 'web' || !isAdmin) return 0;
 

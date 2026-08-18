@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { pushStatus, type PushState } from '../lib/push';
-import { scheduledCount } from '../lib/reminders';
 import { colors, radius, space, type } from '../theme';
 import { topInset } from '../components/ui';
 
@@ -91,13 +90,11 @@ export default function AdminDrawer({
   email: string | null;
 }) {
   const [push, setPush] = useState<{ state: PushState; detail?: string } | null>(null);
-  const [scheduled, setScheduled] = useState<number | null>(null);
 
   // Checked when the drawer opens, not on every render.
   useEffect(() => {
     if (!visible) return;
     void pushStatus().then(setPush);
-    void scheduledCount().then(setScheduled);
   }, [visible]);
   const { width } = useWindowDimensions();
   const panelWidth = Math.min(width * 0.82, 320);
@@ -159,14 +156,12 @@ export default function AdminDrawer({
             }}
           >
             <MaterialCommunityIcons
-              name={scheduled || push?.state === 'registered' ? 'bell-check-outline' : 'bell-off-outline'}
+              name={push?.state === 'registered' ? 'bell-check-outline' : 'bell-off-outline'}
               size={16}
-              color={scheduled || push?.state === 'registered' ? colors.cyan : colors.muted}
+              color={push?.state === 'registered' ? colors.cyan : colors.muted}
             />
             <Text style={styles.pushText}>
-              {scheduled
-                ? `${scheduled} Mazal Tov reminder${scheduled === 1 ? '' : 's'} set on this phone`
-                : push === null
+              {push === null
                 ? 'Checking notifications…'
                 : push.state === 'registered'
                 ? 'Notifications on for this phone'
