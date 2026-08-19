@@ -262,6 +262,9 @@ export default function App() {
         <WaitingScreen
           email={session.user.email ?? null}
           claimedId={(profile as { claimed_staff_id?: number | null }).claimed_staff_id ?? null}
+          claimedName={
+            (profile as { claimed_staff_name?: string | null }).claimed_staff_name ?? null
+          }
           onClaimed={refresh}
         />
       </>

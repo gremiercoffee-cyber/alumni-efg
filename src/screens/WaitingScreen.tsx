@@ -29,16 +29,21 @@ type Choice = { id: number; name: string; title: string | null };
 export default function WaitingScreen({
   email,
   claimedId,
+  claimedName,
   onClaimed,
 }: {
   email: string | null;
   claimedId: number | null;
+  claimedName: string | null;
   onClaimed: () => void;
 }) {
   const [staff, setStaff] = useState<Choice[] | null>(null);
   const [q, setQ] = useState('');
   const [saving, setSaving] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // For a rebbe the list has never heard of.
+  const [ownName, setOwnName] = useState('');
+  const [savingOwn, setSavingOwn] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -60,6 +65,27 @@ export default function WaitingScreen({
   }, [staff, q]);
 
   const claimed = staff?.find((s) => s.id === claimedId) ?? null;
+
+  /**
+   * Say who you are when the list does not know you.
+   *
+   * The staff list came off workbooks written before the app existed, so anyone
+   * who joined since is simply absent. Sending him away to find the admin is
+   * how a sign-up gets abandoned.
+   */
+  async function claimOwnName() {
+    const name = ownName.trim();
+    if (name.length < 3) return;
+    setSavingOwn(true);
+    setError(null);
+    const { error } = await supabase.rpc('claim_new_staff', { p_name: name });
+    setSavingOwn(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    onClaimed();
+  }
 
   async function claim(id: number) {
     setSaving(id);
@@ -89,6 +115,18 @@ export default function WaitingScreen({
         {email ? `${email} doesn't tell us which rebbe you are. ` : ''}
         Pick yourself from the list and the alumni director will let you in.
       </Text>
+
+      {claimedName && !claimed ? (
+        <View style={styles.claimed}>
+          <MaterialCommunityIcons name="check-circle-outline" size={18} color={colors.cyan} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.claimedName}>{claimedName}</Text>
+            <Text style={styles.claimedNote}>
+              You are not on the list yet, so the alumni director will add you.
+            </Text>
+          </View>
+        </View>
+      ) : null}
 
       {claimed ? (
         <View style={styles.claimed}>
@@ -132,10 +170,31 @@ export default function WaitingScreen({
             </TouchableOpacity>
           )}
           ListEmptyComponent={
-            <Text style={styles.body}>
-              No name matches that. If you are not on the list, tell the alumni
-              director and he will add you.
-            </Text>
+            <View style={styles.notListed}>
+              <Text style={styles.body}>
+                No name matches that. If you are new since the list was made, put
+                your name in and the alumni director will add you.
+              </Text>
+              <TextInput
+                style={styles.search}
+                value={ownName}
+                onChangeText={setOwnName}
+                placeholder="Rabbi…"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="words"
+              />
+              <TouchableOpacity
+                style={[styles.addMe, ownName.trim().length < 3 && styles.addMeOff]}
+                disabled={ownName.trim().length < 3 || savingOwn}
+                onPress={claimOwnName}
+              >
+                {savingOwn ? (
+                  <ActivityIndicator color={colors.navy900} size="small" />
+                ) : (
+                  <Text style={styles.addMeText}>That's me — add me</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           }
         />
       )}
@@ -144,6 +203,15 @@ export default function WaitingScreen({
 }
 
 const styles = StyleSheet.create({
+  notListed: { gap: space.sm, paddingTop: space.md },
+  addMe: {
+    backgroundColor: colors.cyan,
+    borderRadius: radius.md,
+    paddingVertical: 13,
+    alignItems: 'center',
+  },
+  addMeOff: { opacity: 0.35 },
+  addMeText: { fontFamily: 'Poppins_700Bold', fontSize: 15, color: colors.navy900 },
   screen: { flex: 1, backgroundColor: colors.navy900, padding: space.md, gap: space.sm },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   brand: { fontFamily: 'Poppins_700Bold', fontSize: 15, color: colors.white },

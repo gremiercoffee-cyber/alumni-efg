@@ -1088,24 +1088,30 @@ export type Database = {
       profiles: {
         Row: {
           claimed_staff_id: number | null
+          claimed_staff_name: string | null
           created_at: string
           display_name: string | null
+          email: string | null
           id: string
           role: Database["public"]["Enums"]["user_role"]
           staff_id: number | null
         }
         Insert: {
           claimed_staff_id?: number | null
+          claimed_staff_name?: string | null
           created_at?: string
           display_name?: string | null
+          email?: string | null
           id: string
           role?: Database["public"]["Enums"]["user_role"]
           staff_id?: number | null
         }
         Update: {
           claimed_staff_id?: number | null
+          claimed_staff_name?: string | null
           created_at?: string
           display_name?: string | null
+          email?: string | null
           id?: string
           role?: Database["public"]["Enums"]["user_role"]
           staff_id?: number | null
@@ -1658,6 +1664,12 @@ export type Database = {
       }
     }
     Views: {
+      admin_push_tokens: {
+        Row: {
+          token: string | null
+        }
+        Relationships: []
+      }
       admin_queue: {
         Row: {
           id: number | null
@@ -1830,12 +1842,12 @@ export type Database = {
       }
       pending_users: {
         Row: {
-          avatar_url: string | null
           claimed_staff_id: number | null
           claimed_staff_name: string | null
           display_name: string | null
           email: string | null
           id: string | null
+          proposed_staff_name: string | null
           signed_up_at: string | null
         }
         Relationships: [
@@ -2132,6 +2144,7 @@ export type Database = {
         Args: { p_attendance_id: number; p_person_id: number }
         Returns: undefined
       }
+      claim_new_staff: { Args: { p_name: string }; Returns: undefined }
       claim_staff: { Args: { p_staff_id: number }; Returns: undefined }
       current_staff_id: { Args: never; Returns: number }
       editable_person_fields: { Args: never; Returns: string[] }
@@ -2160,22 +2173,15 @@ export type Database = {
           starts_on: string
         }[]
       }
-      set_user_role:
-        | {
-            Args: {
-              p_role: Database["public"]["Enums"]["user_role"]
-              p_user: string
-            }
-            Returns: undefined
-          }
-        | {
-            Args: {
-              p_role: Database["public"]["Enums"]["user_role"]
-              p_staff_id?: number
-              p_user: string
-            }
-            Returns: undefined
-          }
+      set_user_role: {
+        Args: {
+          p_new_staff_name?: string
+          p_role: Database["public"]["Enums"]["user_role"]
+          p_staff_id?: number
+          p_user: string
+        }
+        Returns: undefined
+      }
       submit_rsvp: {
         Args: {
           p_email: string

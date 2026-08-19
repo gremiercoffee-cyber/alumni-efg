@@ -31,6 +31,7 @@ type Waiting = {
   signed_up_at: string | null;
   claimed_staff_id: number | null;
   claimed_staff_name: string | null;
+  proposed_staff_name: string | null;
 };
 
 const ROLES: [string, string, string][] = [
@@ -70,6 +71,9 @@ export default function PendingUsersScreen({ onChanged }: { onChanged: () => voi
           // in one call means he cannot be let in and left unlinked -- which
           // would be a rebbe with no alumni and no weekly email.
           p_staff_id: user.claimed_staff_id ?? null,
+          // Null unless he wrote his own name in, in which case approving is
+          // also what creates his staff record.
+          p_new_staff_name: user.proposed_staff_name ?? null,
           p_user: user.id,
           p_role: role as never,
         });
@@ -124,11 +128,19 @@ export default function PendingUsersScreen({ onChanged }: { onChanged: () => voi
 
           {/* Who he says he is. The email rarely says it, and getting this wrong
               hands one rebbe another's alumni. */}
-          <Text style={u.claimed_staff_name ? styles.claim : styles.claimNone}>
+          <Text style={u.claimed_staff_name || u.proposed_staff_name ? styles.claim : styles.claimNone}>
             {u.claimed_staff_name
               ? `Says he is ${u.claimed_staff_name}`
+              : u.proposed_staff_name
+              ? `Says he is ${u.proposed_staff_name} — not on the list`
               : 'Has not said which rebbe he is'}
           </Text>
+          {u.proposed_staff_name && !u.claimed_staff_name ? (
+            <Text style={styles.claimNote}>
+              Letting him in adds him to the staff list under that name. Fix the
+              spelling first if it is wrong — everyone will see it.
+            </Text>
+          ) : null}
           {u.signed_up_at ? (
             <View style={styles.pills}>
               <Badge>
@@ -171,6 +183,13 @@ export default function PendingUsersScreen({ onChanged }: { onChanged: () => voi
 }
 
 const styles = StyleSheet.create({
+  claimNote: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 11.5,
+    color: colors.muted,
+    opacity: 0.75,
+    marginTop: 2,
+  },
   claim: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: colors.cyan, marginTop: 4 },
   claimNone: {
     fontFamily: 'Poppins_400Regular',
