@@ -37,6 +37,10 @@ export async function registerForPush(): Promise<string | null> {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'Alumni news',
         importance: Notifications.AndroidImportance.DEFAULT,
+        // The accent behind the status bar icon. Android throws away the
+        // colour in the icon itself and uses this instead, so without it the
+        // flame is white on grey.
+        lightColor: '#2fe0d2',
       });
     }
 
