@@ -88,6 +88,7 @@ export default function App() {
   const [checking, setChecking] = useState(false);
   // The feed item being looked at, for fixing or removing it.
   const [openItem, setOpenItem] = useState<FeedItem | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
 
   // Required by file, not from the package index: that index pulls in all 18
   // Poppins weights and Metro bundles every one into the web build.
@@ -144,6 +145,14 @@ export default function App() {
         .maybeSingle();
       setProfile(prof ?? null);
       setDirectory(await loadDirectory(prof?.staff_id ?? null));
+      // How many people are waiting to be let in -- shown as a badge so the
+      // admin sees it without hunting through the drawer.
+      if (prof?.role === 'admin') {
+        const { count } = await supabase
+          .from('pending_users')
+          .select('id', { count: 'exact', head: true });
+        setPendingCount(count ?? 0);
+      }
     })().catch(fail);
 
     await Promise.all([feedDone, dirDone]);
@@ -423,6 +432,7 @@ export default function App() {
             accessibilityLabel="Admin tools"
           >
             <MaterialIcons name="menu" size={22} color={colors.white} />
+            {pendingCount > 0 ? <View style={styles.burgerDot} /> : null}
           </TouchableOpacity>
         ) : null}
 
@@ -487,6 +497,7 @@ export default function App() {
             void supabase.auth.signOut();
           }}
           email={session.user.email ?? null}
+          pendingCount={pendingCount}
         />
       ) : null}
 
@@ -566,6 +577,15 @@ const styles = StyleSheet.create({
     paddingBottom: space.sm + 4,
   },
   burger: { paddingRight: 12, paddingVertical: 2 },
+  burgerDot: {
+    position: 'absolute',
+    top: 0,
+    right: 8,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: colors.cyan,
+  },
   brand: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   brandName: { fontFamily: 'Poppins_700Bold', fontSize: 15, color: colors.white },
   brandAt: { color: colors.cyan },

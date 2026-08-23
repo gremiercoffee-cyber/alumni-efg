@@ -89,12 +89,14 @@ export default function AdminDrawer({
   onPick,
   onSignOut,
   email,
+  pendingCount = 0,
 }: {
   visible: boolean;
   onClose: () => void;
   onPick: (tool: string) => void;
   onSignOut: () => void;
   email: string | null;
+  pendingCount?: number;
 }) {
   const [push, setPush] = useState<{ state: PushState; detail?: string } | null>(null);
 
@@ -148,6 +150,11 @@ export default function AdminDrawer({
                   <Text style={styles.itemLabel}>{t.label}</Text>
                   <Text style={styles.itemHint}>{t.ready ? t.hint : 'Not built yet'}</Text>
                 </View>
+                {t.id === 'pending' && pendingCount > 0 ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{pendingCount}</Text>
+                  </View>
+                ) : null}
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -189,6 +196,16 @@ export default function AdminDrawer({
 }
 
 const styles = StyleSheet.create({
+  badge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.cyan,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  badgeText: { fontFamily: 'Poppins_700Bold', fontSize: 12, color: colors.navy900 },
   pushRow: {
     flexDirection: 'row',
     alignItems: 'center',

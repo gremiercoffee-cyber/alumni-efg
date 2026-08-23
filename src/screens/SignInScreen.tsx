@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { signInWithGoogle } from '../lib/auth';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { colors, radius, space, type } from '../theme';
 
 /**
@@ -123,8 +124,13 @@ export default function SignInScreen() {
           <View style={styles.rule} />
         </View>
 
-        <TouchableOpacity style={styles.google} onPress={google} disabled={busy}>
-          <Text style={styles.googleText}>Continue with Google</Text>
+        <TouchableOpacity
+          style={styles.google}
+          onPress={google}
+          disabled={busy}
+          accessibilityLabel="Sign in with Google"
+        >
+          <MaterialCommunityIcons name="google" size={22} color={colors.white} />
         </TouchableOpacity>
 
         {sent ? (
