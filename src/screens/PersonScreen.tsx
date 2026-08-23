@@ -24,6 +24,7 @@ export default function PersonScreen({
 
   const life = [
     person.college,
+    (person as { yeshiva?: string | null }).yeshiva,
     person.occupation,
     person.spouse_name ? `Married to ${person.spouse_name}` : null,
     [person.city, person.country].filter(Boolean).join(', ') || null,

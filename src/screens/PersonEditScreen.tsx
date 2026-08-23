@@ -59,11 +59,16 @@ const GROUPS: [string, FieldSpec[]][] = [
     // of tapping.
     { key: 'birthday', label: 'Birthday (YYYY-MM-DD)' },
     { key: 'high_school', label: 'High school' },
-    { key: 'college', label: 'College' },
-    { key: 'grad_school', label: 'Graduate school' },
-    { key: 'occupation', label: 'Occupation' },
     { key: 'marital_status', label: 'Marital status' },
     { key: 'spouse_name', label: "Wife's name" },
+  ]],
+  // Where he went after Aish. College for most, yeshiva for the ones still
+  // learning, grad school later, and what he does now.
+  ['POST-AISH', [
+    { key: 'college', label: 'College' },
+    { key: 'yeshiva', label: 'Yeshiva' },
+    { key: 'grad_school', label: 'Graduate school' },
+    { key: 'occupation', label: 'Occupation / doing now' },
   ]],
   ['NOTES', [{ key: 'notes', label: 'Notes', multiline: true }]],
 ];

@@ -18,6 +18,7 @@ export type AlumniRecord = Person & {
    * types, which needs CLI access to the project.
    */
   birthday?: string | null;
+  yeshiva?: string | null;
   in_chinuch?: boolean;
   chinuch_role?: string | null;
 
@@ -64,25 +65,56 @@ const groupBy = <T extends { person_id: number }>(rows: T[] | null) => {
   return m;
 };
 
+/**
+ * Fetch every row, not just the first 1000.
+ *
+ * PostgREST caps a response at 1000 rows. staff_connections crossed that (1684),
+ * and because a rebbe's rows can sit past the cap, his connections silently
+ * vanished on every reload -- a starred man reverted to grey the moment the
+ * directory refreshed. This pages through in chunks until a short page ends it.
+ * enrollments is already near the cap, so the same treatment guards it too.
+ */
+async function fetchAll<T>(
+  build: () => ReturnType<ReturnType<typeof supabase.from>['select']>,
+): Promise<T[]> {
+  const PAGE = 1000;
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await build().range(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as T[];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 export async function loadDirectory(myStaffId: number | null): Promise<Directory> {
-  const [people, enrolments, aliases, staff, connections, attendance, events, contact] =
+  const [peopleRows, enrolRows, aliasRows, staffRows, connRows, attendRows, eventRows, contactRows] =
     await Promise.all([
-      supabase.from('people').select('*').order('last_name'),
-      supabase.from('enrollments').select('person_id, academic_year, level, rebbe_id'),
-      supabase.from('person_aliases').select('person_id, alias'),
-      supabase.from('staff').select('id, name').order('surname'),
-      supabase.from('staff_connections').select('person_id, staff_id'),
-      supabase.from('event_attendance').select('person_id, event_id'),
-      supabase.from('events').select('id, year, type'),
-      supabase.from('person_last_contact').select('person_id, last_contacted_on'),
+      fetchAll<any>(() => supabase.from('people').select('*').order('last_name') as never),
+      fetchAll<any>(() => supabase.from('enrollments').select('person_id, academic_year, level, rebbe_id') as never),
+      fetchAll<any>(() => supabase.from('person_aliases').select('person_id, alias') as never),
+      fetchAll<any>(() => supabase.from('staff').select('id, name').order('surname') as never),
+      fetchAll<any>(() => supabase.from('staff_connections').select('person_id, staff_id') as never),
+      fetchAll<any>(() => supabase.from('event_attendance').select('person_id, event_id') as never),
+      fetchAll<any>(() => supabase.from('events').select('id, year, type') as never),
+      fetchAll<any>(() => supabase.from('person_last_contact').select('person_id, last_contacted_on') as never),
     ]);
 
-  const failed = [people, enrolments, aliases, staff, connections, attendance, events, contact]
-    .find((r) => r.error);
-  if (failed?.error) throw failed.error;
+  // Keep the rest of the function unchanged: wrap each list back into the
+  // { data } shape it already reads from.
+  const people = { data: peopleRows as any[] };
+  const enrolments = { data: enrolRows as any[] };
+  const aliases = { data: aliasRows as any[] };
+  const staff = { data: staffRows as any[] };
+  const connections = { data: connRows as any[] };
+  const attendance = { data: attendRows as any[] };
+  const events = { data: eventRows as any[] };
+  const contact = { data: contactRows as any[] };
 
-  const staffName = new Map((staff.data ?? []).map((s) => [s.id, s.name]));
-  const eventYear = new Map((events.data ?? []).map((e) => [e.id, String(e.year)]));
+  const staffName = new Map((staff.data ?? []).map((s: any) => [s.id, s.name]));
+  const eventYear = new Map((events.data ?? []).map((e: any) => [e.id, String(e.year)]));
 
   const enrolMap = groupBy(enrolments.data);
   const aliasMap = groupBy(aliases.data);
