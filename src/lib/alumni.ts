@@ -18,6 +18,8 @@ export type AlumniRecord = Person & {
    * types, which needs CLI access to the project.
    */
   birthday?: string | null;
+  in_chinuch?: boolean;
+  chinuch_role?: string | null;
 
   name: string;
   aliases: string[];

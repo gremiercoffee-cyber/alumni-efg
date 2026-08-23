@@ -6,6 +6,7 @@ import type { AlumniRecord } from '../lib/alumni';
 import { yearRange } from '../lib/alumni';
 import { reachByEmail, reachByPhone } from '../lib/contact';
 import { MineStar } from '../lib/mine';
+import { ChinuchBadge } from './Chinuch';
 import { colors, radius, space, type } from '../theme';
 import { Avatar } from './ui';
 
@@ -33,9 +34,12 @@ export default function PersonRow({
       <TouchableOpacity style={styles.main} onPress={onOpen} accessibilityRole="button">
         <Avatar name={person.name} />
         <View style={styles.who}>
-          <Text style={styles.name} numberOfLines={1}>
-            {person.name}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name} numberOfLines={1}>
+              {person.name}
+            </Text>
+            <ChinuchBadge person={person} />
+          </View>
           <Text style={styles.sub} numberOfLines={1}>
             {sub || '—'}
           </Text>
@@ -93,6 +97,7 @@ const styles = StyleSheet.create({
     paddingRight: space.sm,
     minWidth: 0,
   },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   who: { flex: 1, minWidth: 0 },
   name: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: colors.white },
   sub: { fontFamily: 'Poppins_400Regular', fontSize: 12, color: colors.muted, opacity: 0.75 },

@@ -850,6 +850,7 @@ export type Database = {
         Row: {
           aish_impact: string | null
           birthday: string | null
+          chinuch_role: string | null
           city: string | null
           college: string | null
           contact_updated_on: string | null
@@ -865,6 +866,7 @@ export type Database = {
           high_school: string | null
           hometown: string | null
           id: number
+          in_chinuch: boolean
           last_name: string
           learning_post_gesher: string | null
           marital_status: string | null
@@ -882,6 +884,7 @@ export type Database = {
         Insert: {
           aish_impact?: string | null
           birthday?: string | null
+          chinuch_role?: string | null
           city?: string | null
           college?: string | null
           contact_updated_on?: string | null
@@ -897,6 +900,7 @@ export type Database = {
           high_school?: string | null
           hometown?: string | null
           id?: number
+          in_chinuch?: boolean
           last_name: string
           learning_post_gesher?: string | null
           marital_status?: string | null
@@ -914,6 +918,7 @@ export type Database = {
         Update: {
           aish_impact?: string | null
           birthday?: string | null
+          chinuch_role?: string | null
           city?: string | null
           college?: string | null
           contact_updated_on?: string | null
@@ -929,6 +934,7 @@ export type Database = {
           high_school?: string | null
           hometown?: string | null
           id?: number
+          in_chinuch?: boolean
           last_name?: string
           learning_post_gesher?: string | null
           marital_status?: string | null
@@ -2172,6 +2178,10 @@ export type Database = {
           location: string
           starts_on: string
         }[]
+      }
+      set_chinuch: {
+        Args: { p_in: boolean; p_person_id: number; p_role: string }
+        Returns: undefined
       }
       set_user_role: {
         Args: {

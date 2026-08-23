@@ -6,6 +6,7 @@ import { Badge, Prose, Section } from '../components/ui';
 import type { AlumniRecord } from '../lib/alumni';
 import { reachByEmail, reachByPhone } from '../lib/contact';
 import { MineStar } from '../lib/mine';
+import { ChinuchControl } from '../components/Chinuch';
 import { colors, radius, space, type } from '../theme';
 
 export default function PersonScreen({

@@ -30,6 +30,9 @@ export const colors = {
   // A filled star is a claim, not a status, so it gets its own warm colour
   // rather than the cyan that already means 'selected' everywhere else.
   star: '#ffd166',
+  // Chinuch / kiruv. A warm violet, distinct from the star's gold and the
+  // cyan that means 'selected' -- three glanceable states must not blur.
+  chinuch: '#b39ddf',
 
   good: '#2fe0d2',
   warn: '#ffd166',
