@@ -39,7 +39,8 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "Alumni Portal"
     },
     "extra": {
       "eas": {

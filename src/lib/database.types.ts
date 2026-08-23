@@ -1461,6 +1461,82 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_broadcasts: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          id: number
+          last_error: string | null
+          person_id: number | null
+          sent_at: string | null
+          subject: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string | null
+          id?: number
+          last_error?: string | null
+          person_id?: number | null
+          sent_at?: string | null
+          subject: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          id?: number
+          last_error?: string | null
+          person_id?: number | null
+          sent_at?: string | null
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_broadcasts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "pending_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_broadcasts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_broadcasts_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_broadcasts_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "staff_broadcasts_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "staff_broadcasts_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+        ]
+      }
       staff_connections: {
         Row: {
           created_at: string
@@ -1957,6 +2033,48 @@ export type Database = {
         }
         Relationships: []
       }
+      recent_profile_changes: {
+        Row: {
+          changed_at: string | null
+          changed_by: string | null
+          field: string | null
+          id: number | null
+          new_value: string | null
+          old_value: string | null
+          person_id: number | null
+          subject_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "person_edits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_edits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "person_last_contact"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "person_edits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "rebbe_alumni"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "person_edits_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "upcoming_birthdays"
+            referencedColumns: ["person_id"]
+          },
+        ]
+      }
       reported_claims: {
         Row: {
           id: number | null
@@ -2153,6 +2271,10 @@ export type Database = {
       claim_new_staff: { Args: { p_name: string }; Returns: undefined }
       claim_staff: { Args: { p_staff_id: number }; Returns: undefined }
       current_staff_id: { Args: never; Returns: number }
+      edit_person: {
+        Args: { p_changes: Json; p_person_id: number }
+        Returns: undefined
+      }
       editable_person_fields: { Args: never; Returns: string[] }
       fan_out_notification: { Args: { p_outbox_id: number }; Returns: number }
       is_admin: { Args: never; Returns: boolean }

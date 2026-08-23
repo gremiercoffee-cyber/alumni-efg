@@ -49,8 +49,15 @@ export const ADMIN_TOOLS: AdminTool[] = [
   {
     id: 'edits',
     label: 'Proposed changes',
-    hint: 'Corrections other people have suggested',
+    hint: 'Wedding dates and simchas people have suggested',
     icon: 'pencil-outline',
+    ready: true,
+  },
+  {
+    id: 'changes',
+    label: 'Recent changes',
+    hint: 'Info people have updated — and tell staff',
+    icon: 'history',
     ready: true,
   },
   {

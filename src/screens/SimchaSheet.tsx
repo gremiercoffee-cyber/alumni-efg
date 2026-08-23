@@ -13,6 +13,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import DateField from '../components/DatePicker';
 import { labelFor, type FeedItem } from '../lib/simchas';
 import { supabase } from '../lib/supabase';
+import { letStaffKnow } from '../lib/staff';
 import { colors, radius, space, type } from '../theme';
 
 /**
@@ -200,6 +201,22 @@ export default function SimchaSheet({
             </>
           )}
 
+          {isAdmin ? (
+            <TouchableOpacity
+              style={styles.tell}
+              onPress={() =>
+                letStaffKnow(
+                  `${item.subject_name}${labelFor(item.subtype, -1)}`.trim(),
+                  `${item.subject_name}${labelFor(item.subtype, -1)}.`,
+                  item.person_id,
+                )
+              }
+            >
+              <MaterialCommunityIcons name="email-fast-outline" size={16} color={colors.cyan} />
+              <Text style={styles.openText}>Let staff know</Text>
+            </TouchableOpacity>
+          ) : null}
+
           {item.person_id && onOpenPerson ? (
             <TouchableOpacity
               style={styles.openRow}
@@ -364,6 +381,15 @@ const styles = StyleSheet.create({
   btnPrimaryText: { fontFamily: 'Poppins_700Bold', fontSize: 14, color: colors.navy900 },
   btnBad: { borderColor: 'rgba(255,138,128,0.45)' },
   btnBadText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: '#ff8a80' },
+  tell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: space.md,
+    paddingTop: space.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.ruleOnNavy,
+  },
   openRow: {
     flexDirection: 'row',
     alignItems: 'center',

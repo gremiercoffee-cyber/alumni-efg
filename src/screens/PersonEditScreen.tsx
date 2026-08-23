@@ -101,7 +101,6 @@ export default function PersonEditScreen({
     setError(null);
 
     try {
-      const { data: me } = await supabase.auth.getUser();
 
       if (isAdmin) {
         const patch = Object.fromEntries(
@@ -113,27 +112,19 @@ export default function PersonEditScreen({
           .eq('id', person.id);
         if (error) throw error;
       } else {
-        // One row per field, so each can be judged on its own.
-        const { error } = await supabase.from('person_edits').insert(
-          changed.map((f) => ({
-            person_id: person.id,
-            field: f.key,
-            old_value: original[f.key] || null,
-            new_value: values[f.key].trim() || null,
-            submitted_by: me.user?.id ?? null,
-          })),
+        // Applies immediately. The admin is told in the daily summary, not asked
+        // to approve -- a contact detail is a fact, not an announcement.
+        const changes = Object.fromEntries(
+          changed.map((f) => [f.key, values[f.key].trim() || null]),
         );
+        const { error } = await supabase.rpc('edit_person' as never, {
+          p_person_id: person.id,
+          p_changes: changes,
+        } as never);
         if (error) throw error;
       }
 
       onSaved();
-      if (!isAdmin) {
-        Alert.alert(
-          'Sent for review',
-          `${changed.length} change${changed.length === 1 ? '' : 's'} went to the admin. ` +
-            'Nothing has changed on his record yet.',
-        );
-      }
       onBack();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save.');
@@ -163,14 +154,14 @@ export default function PersonEditScreen({
           {busy ? (
             <ActivityIndicator size="small" color={colors.cyan} />
           ) : (
-            <Text style={styles.save}>{isAdmin ? 'Save' : 'Propose'}</Text>
+            <Text style={styles.save}>Save</Text>
           )}
         </TouchableOpacity>
       </View>
 
       {!isAdmin ? (
         <Text style={styles.notice}>
-          Your changes go to the admin to approve. His record stays as it is until then.
+          Changes save right away. The alumni director is notified — no need to wait.
         </Text>
       ) : null}
 

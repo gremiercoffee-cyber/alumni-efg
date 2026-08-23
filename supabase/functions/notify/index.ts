@@ -284,8 +284,57 @@ Deno.serve(async (req) => {
     }
   }
 
+  // "Let staff know" -- on-demand notes the admin chose to send. Drained every
+  // run, not held to 9am: he pressed a button and expects it to go. Reaches the
+  // rebbeim list; nothing sends until that address and the mail credentials
+  // exist, and an unsent one keeps its place in the queue.
+  let broadcasts = 0;
+  const { data: pending } = await admin
+    .from('staff_broadcasts')
+    .select('*')
+    .is('sent_at', null)
+    .order('created_at');
+  const listTo = s.redirect_all_to || s.list_email;
+  for (const b of pending ?? []) {
+    if (dryRun) { broadcasts++; continue; }
+    if (!(s.emails_enabled && listTo)) break; // not configured yet; leave queued
+    try {
+      await sendMail(listTo, b.subject, shell(b.subject, para(esc(b.body))));
+      await admin.from('staff_broadcasts')
+        .update({ sent_at: new Date().toISOString() }).eq('id', b.id);
+      broadcasts++;
+    } catch (e) {
+      await admin.from('staff_broadcasts')
+        .update({ last_error: e instanceof Error ? e.message : String(e) }).eq('id', b.id);
+    }
+  }
+
+  // Daily summary of profile edits: one push, "N profiles changed since
+  // yesterday", at the send hour. The edits already applied -- this is the
+  // being-told the admin asked for, not a queue to work.
+  let changeSummary: unknown = null;
+  if (!hold || opts?.force) {
+    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const { data: changes } = await admin
+      .from('recent_profile_changes')
+      .select('person_id, changed_at')
+      .gte('changed_at', since);
+    const n = (changes ?? []).length;
+    const people = new Set((changes ?? []).map((c: { person_id: number }) => c.person_id)).size;
+    changeSummary = { edits: n, people };
+    if (!dryRun && n > 0 && s.push_enabled && adminTokens.length) {
+      await push(
+        adminTokens,
+        'Profiles updated',
+        `${people} ${people === 1 ? 'alumnus' : 'alumni'} updated since yesterday (${n} change${n === 1 ? '' : 's'}).`,
+      );
+    }
+  }
+
   return Response.json({
     dry_run: dryRun,
+    broadcasts,
+    change_summary: changeSummary,
     queued,
     considered: (due ?? []).length,
     emails_on: s.emails_enabled,

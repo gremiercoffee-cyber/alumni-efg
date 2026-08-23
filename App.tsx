@@ -42,6 +42,7 @@ import AdminDrawer, { ADMIN_TOOLS } from './src/screens/AdminDrawer';
 import PendingUsersScreen from './src/screens/PendingUsersScreen';
 import ProposedEditsScreen from './src/screens/ProposedEditsScreen';
 import ReportedScreen from './src/screens/ReportedScreen';
+import RecentChangesScreen from './src/screens/RecentChangesScreen';
 import StaysScreen from './src/screens/StaysScreen';
 import EventsScreen from './src/screens/EventsScreen';
 import RsvpScreen from './src/screens/RsvpScreen';
@@ -320,6 +321,9 @@ export default function App() {
     }
     if (tool === 'reported') {
       return <ReportedScreen directory={directory} onChanged={refresh} />;
+    }
+    if (tool === 'changes') {
+      return <RecentChangesScreen />;
     }
     if (tool === 'stays') {
       return <StaysScreen onChanged={refresh} />;
