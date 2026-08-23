@@ -7,7 +7,7 @@ import type { AlumniRecord, Directory } from '../lib/alumni';
 import { reachByEmail, reachByPhone } from '../lib/contact';
 import { labelFor, visualFor, type FeedItem } from '../lib/simchas';
 import { MineStar } from '../lib/mine';
-import { ChinuchBadge } from '../components/Chinuch';
+import { ChinuchStar } from '../components/Chinuch';
 import { colors, radius, space, type } from '../theme';
 import { Chip, ChipRow, Empty } from '../components/ui';
 
@@ -255,7 +255,7 @@ function Row({
           <Text style={styles.rowTitle} numberOfLines={1}>
             {title}
           </Text>
-          {person ? <ChinuchBadge person={person} /> : null}
+          {person ? <ChinuchStar personId={person.id} size={18} /> : null}
         </View>
         <Text style={styles.rowSub} numberOfLines={1}>
           {[item.detail, relative].filter(Boolean).join(' · ')}

@@ -194,6 +194,8 @@ export type Filters = {
    */
   rebbe: string | null;
   mineOnly: boolean;
+  /** Only men flagged as in chinuch or kiruv. */
+  chinuchOnly: boolean;
 };
 
 export const emptyFilters: Filters = {
@@ -202,6 +204,7 @@ export const emptyFilters: Filters = {
   level: null,
   rebbe: null,
   mineOnly: false,
+  chinuchOnly: false,
 };
 
 export function applyFilters(people: AlumniRecord[], f: Filters): AlumniRecord[] {
@@ -209,6 +212,7 @@ export function applyFilters(people: AlumniRecord[], f: Filters): AlumniRecord[]
   const terms = f.query.toLowerCase().split(/\s+/).filter(Boolean);
   return people.filter((p) => {
     if (f.mineOnly && !(p as AlumniRecord & { mine?: boolean }).mine) return false;
+    if (f.chinuchOnly && !(p as AlumniRecord & { in_chinuch?: boolean }).in_chinuch) return false;
 
     // Year and level travel together. Checking them separately would match a man
     // who was here in 2019-20 and was Shana Bet in some entirely different year.

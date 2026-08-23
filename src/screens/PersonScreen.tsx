@@ -6,7 +6,7 @@ import { Badge, Prose, Section } from '../components/ui';
 import type { AlumniRecord } from '../lib/alumni';
 import { reachByEmail, reachByPhone } from '../lib/contact';
 import { MineStar } from '../lib/mine';
-import { ChinuchControl } from '../components/Chinuch';
+import { ChinuchChip } from '../components/Chinuch';
 import { colors, radius, space, type } from '../theme';
 
 export default function PersonScreen({
@@ -49,6 +49,7 @@ export default function PersonScreen({
           {person.aliases.length ? (
             <Text style={styles.alias}>also recorded as {person.aliases.join(', ')}</Text>
           ) : null}
+          <ChinuchChip personId={person.id} />
           <View style={styles.badges}>
             {person.levels.map((l) => (
               <Badge key={l} tone="cyan">{l}</Badge>

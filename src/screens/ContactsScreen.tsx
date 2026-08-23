@@ -102,6 +102,14 @@ export default function ContactsScreen({
         </ChipRow>
       ) : null}
 
+      <ChipRow label="DOING" sub>
+        <Chip
+          label="In chinuch / kiruv"
+          active={filters.chinuchOnly}
+          onPress={() => onFilters({ ...filters, chinuchOnly: !filters.chinuchOnly })}
+        />
+      </ChipRow>
+
       <ChipRow label="REBBE" sub>
         <Chip
           label="Any rebbe"

@@ -6,7 +6,7 @@ import type { AlumniRecord } from '../lib/alumni';
 import { yearRange } from '../lib/alumni';
 import { reachByEmail, reachByPhone } from '../lib/contact';
 import { MineStar } from '../lib/mine';
-import { ChinuchBadge } from './Chinuch';
+import { ChinuchStar } from './Chinuch';
 import { colors, radius, space, type } from '../theme';
 import { Avatar } from './ui';
 
@@ -38,7 +38,7 @@ export default function PersonRow({
             <Text style={styles.name} numberOfLines={1}>
               {person.name}
             </Text>
-            <ChinuchBadge person={person} />
+
           </View>
           <Text style={styles.sub} numberOfLines={1}>
             {sub || '—'}
@@ -54,6 +54,7 @@ export default function PersonRow({
 
       <View style={styles.quick}>
         <MineStar personId={person.id} size={19} />
+        <ChinuchStar personId={person.id} size={18} />
         <TouchableOpacity
           style={[styles.qb, styles.qbWa, (dnc || !person.phone) && styles.qbOff]}
           disabled={dnc || !person.phone}

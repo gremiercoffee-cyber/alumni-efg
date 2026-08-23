@@ -25,6 +25,7 @@ import * as Updates from 'expo-updates';
 import { markNavigation, useBack } from './src/lib/useBack';
 import { rsvpTokenFromUrl } from './src/lib/events';
 import { MineProvider } from './src/lib/mine';
+import { ChinuchProvider } from './src/components/Chinuch';
 import { errText, isAuthFailure } from './src/lib/errors';
 import { registerForPush } from './src/lib/push';
 import { clearLocalReminders } from './src/lib/reminders';
@@ -405,6 +406,7 @@ export default function App() {
       directory={directory}
       onChanged={refresh}
     >
+    <ChinuchProvider directory={directory} onChanged={refresh}>
     <View style={styles.app}>
       <StatusBar style="light" />
 
@@ -537,6 +539,7 @@ export default function App() {
         ))}
       </View>
     </View>
+    </ChinuchProvider>
     </MineProvider>
   );
 }
