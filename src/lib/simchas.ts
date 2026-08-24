@@ -72,6 +72,32 @@ export function labelFor(subtype: string, days: number): string {
 export const SIMCHA_LABEL: Record<string, string> = PAST;
 
 /**
+ * A short noun for the feed row -- shown under the name, since the date is
+ * already on the tile to the left and the icon alone is not obvious.
+ */
+const SHORT: Record<string, string> = {
+  engagement: 'Engagement',
+  wedding_scheduled: 'Wedding date set',
+  wedding: 'Wedding',
+  birth: 'New baby',
+  bar_mitzvah: 'Bar mitzvah',
+  child_engagement: "Child's engagement",
+  child_wedding_scheduled: "Child's wedding date set",
+  child_wedding: "Child's wedding",
+  grandchild_birth: 'New grandchild',
+  other: 'Simcha',
+  shabbaton: 'Shabbaton',
+  dinner: 'Dinner',
+  israel_expected: 'Coming to Israel',
+  israel_here: 'In Israel',
+  visit_expected: 'Coming to yeshiva',
+  visit_staying_expected: 'Coming to stay in yeshiva',
+  visit_came: 'Came to yeshiva',
+  visit_stayed: 'Stayed in yeshiva',
+};
+export const shortLabel = (subtype: string) => SHORT[subtype] ?? 'Simcha';
+
+/**
  * A distinct glyph and colour per simcha, so the type reads before the words do.
  * MaterialCommunityIcons names, drawn from the font Expo already ships.
  */

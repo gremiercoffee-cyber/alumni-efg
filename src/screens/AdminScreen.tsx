@@ -86,6 +86,7 @@ export default function AdminScreen({
   const [justAnnounced, setJustAnnounced] = useState<Set<number>>(new Set());
   // Per-row, so typing a date into one card does not disturb another.
   const [dateDraft, setDateDraft] = useState<Record<number, string>>({});
+  const [venueDraft, setVenueDraft] = useState<Record<number, string>>({});
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -129,11 +130,17 @@ export default function AdminScreen({
         type: 'wedding',
         occurred_on: date,
         wedding_on: date,
+        venue: venueDraft[row.id]?.trim() || null,
         parent_simcha_id: row.id,
       });
       if (error) throw error;
       setDateDraft((d) => {
         const next = { ...d };
+        delete next[row.id];
+        return next;
+      });
+      setVenueDraft((v) => {
+        const next = { ...v };
         delete next[row.id];
         return next;
       });
@@ -355,6 +362,13 @@ export default function AdminScreen({
                             placeholder="Pick the date"
                           />
                         </View>
+                        <TextInput
+                          style={styles.venueInput}
+                          value={venueDraft[row.id] ?? ''}
+                          onChangeText={(t) => setVenueDraft((v) => ({ ...v, [row.id]: t }))}
+                          placeholder="Where (optional)"
+                          placeholderTextColor={colors.muted}
+                        />
                         <TouchableOpacity
                           style={[
                             styles.btn,
@@ -432,6 +446,18 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   dateInput: { minWidth: 150 },
+  venueInput: {
+    minWidth: 150,
+    backgroundColor: colors.navy900,
+    borderWidth: 1,
+    borderColor: colors.ruleOnNavy,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    color: colors.white,
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+  },
   btn: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1308,6 +1308,7 @@ export type Database = {
           spouse_name: string | null
           staff_id: number | null
           type: Database["public"]["Enums"]["simcha_type"]
+          venue: string | null
           wedding_on: string | null
         }
         Insert: {
@@ -1323,6 +1324,7 @@ export type Database = {
           spouse_name?: string | null
           staff_id?: number | null
           type: Database["public"]["Enums"]["simcha_type"]
+          venue?: string | null
           wedding_on?: string | null
         }
         Update: {
@@ -1338,6 +1340,7 @@ export type Database = {
           spouse_name?: string | null
           staff_id?: number | null
           type?: Database["public"]["Enums"]["simcha_type"]
+          venue?: string | null
           wedding_on?: string | null
         }
         Relationships: [

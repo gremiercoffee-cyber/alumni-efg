@@ -249,7 +249,6 @@ export default function SimchaSheet({
 function Suggest({ item, onDone }: { item: FeedItem; onDone: () => void }) {
   const wedding = item.subtype === 'engagement';
   const [value, setValue] = useState<string | null>(wedding ? null : item.on_date);
-  const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
 
@@ -269,7 +268,6 @@ function Suggest({ item, onDone }: { item: FeedItem; onDone: () => void }) {
         simcha_id: item.id,
         field: wedding ? 'wedding_on' : 'occurred_on',
         new_value: value,
-        reason: reason.trim() || null,
         submitted_by: me.user?.id ?? null,
       });
       if (error) throw error;
@@ -309,16 +307,6 @@ function Suggest({ item, onDone }: { item: FeedItem; onDone: () => void }) {
             + 'the piece that has always gone missing.'
           : 'Only suggest a change if you think the date on it is wrong.'}
       </Text>
-
-      <Text style={styles.label}>HOW YOU KNOW</Text>
-      <TextInput
-        style={styles.note}
-        value={reason}
-        onChangeText={setReason}
-        multiline
-        placeholder="His brother told me…"
-        placeholderTextColor={colors.muted}
-      />
 
       <TouchableOpacity
         style={[styles.btn, styles.btnPrimary, !value && styles.btnOff, { marginTop: space.md }]}

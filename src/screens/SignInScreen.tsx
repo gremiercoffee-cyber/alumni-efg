@@ -73,7 +73,7 @@ export default function SignInScreen() {
         <Text style={styles.title}>Alumni</Text>
         <Text style={styles.blurb}>
           {sent
-            ? `Enter the six-digit code sent to ${email.trim()}.`
+            ? `Enter the code sent to ${email.trim()}.`
             : 'Sign in with your email and we will send you a code.'}
         </Text>
 
@@ -95,10 +95,10 @@ export default function SignInScreen() {
             style={[styles.input, styles.code]}
             value={code}
             onChangeText={setCode}
-            placeholder="123456"
+            placeholder="Code"
             placeholderTextColor={colors.mutedDark}
             keyboardType="number-pad"
-            maxLength={6}
+            maxLength={10}
             autoFocus
             onSubmitEditing={verify}
           />
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 16,
   },
-  code: { letterSpacing: 8, textAlign: 'center', fontSize: 24 },
+  code: { letterSpacing: 5, textAlign: 'center', fontSize: 22 },
   button: {
     backgroundColor: colors.cyan,
     borderRadius: radius.md,

@@ -5,7 +5,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { AlumniRecord, Directory } from '../lib/alumni';
 import { reachByEmail, reachByPhone } from '../lib/contact';
-import { labelFor, visualFor, type FeedItem } from '../lib/simchas';
+import { labelFor, visualFor, shortLabel, type FeedItem } from '../lib/simchas';
 import { MineStar } from '../lib/mine';
 import { ChinuchStar } from '../components/Chinuch';
 import { colors, radius, space, type } from '../theme';
@@ -216,11 +216,11 @@ function Row({
   const days = Math.round((startOfDay(when).getTime() - today.getTime()) / MS_DAY);
   const { icon, tint } = visualFor(item.subtype);
 
-  // Tense follows the date: a wedding next week has not happened yet.
-  const title =
-    item.kind === 'event'
-      ? item.subject_name
-      : `${item.subject_name ?? ''}${labelFor(item.subtype, days)}`;
+  // Just the name up top. What kind of simcha goes underneath as a plain word,
+  // since the date is already on the tile to the left and the icon alone is not
+  // obvious.
+  const title = item.subject_name ?? '';
+  const kindWord = item.kind === 'event' ? null : shortLabel(item.subtype);
 
   const relative =
     days === 0
@@ -258,7 +258,7 @@ function Row({
           {person ? <ChinuchStar personId={person.id} size={18} /> : null}
         </View>
         <Text style={styles.rowSub} numberOfLines={1}>
-          {[item.detail, relative].filter(Boolean).join(' · ')}
+          {[kindWord, item.detail].filter(Boolean).join(' · ') || relative}
         </Text>
       </View>
 
