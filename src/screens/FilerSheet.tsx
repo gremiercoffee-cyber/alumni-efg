@@ -1,9 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,17 +15,20 @@ import { describe, fileOne, readNote, type Proposal } from '../lib/filer';
 import { colors, radius, space, type } from '../theme';
 
 /**
- * Say what happened, in a sentence, and file it.
+ * Say what happened, and file it. One button.
  *
- * Three states in one sheet: write, confirm, done. It never files without being
- * shown first -- the point is not to save the two taps, it is to save the
- * thinking about which screen a thing belongs on.
+ * Tap the mic, talk, tap to stop. It writes down what it heard, works out what
+ * you meant, and shows it back -- "is this right?" -- before anything is saved.
+ * Yes files it, No throws it away. Never files without being shown first: the
+ * point is not to save the taps, it is to save the thinking about which screen
+ * a thing belongs on.
  *
- * A name the database cannot resolve to one man is offered as a choice rather
- * than guessed. There are two unrelated Avi Greens.
+ * The web has no microphone here, so it falls back to a box you type into. A
+ * name the database cannot resolve to one man is offered as a choice rather
+ * than guessed -- there are two unrelated Avi Greens.
  */
 
-type Stage = 'write' | 'recording' | 'transcribing' | 'reading' | 'confirm' | 'filing';
+type Stage = 'idle' | 'recording' | 'thinking' | 'confirm' | 'filing';
 
 export default function FilerSheet({
   visible,
@@ -38,8 +39,9 @@ export default function FilerSheet({
   onClose: () => void;
   onFiled: () => void;
 }) {
-  const [stage, setStage] = useState<Stage>('write');
-  const [text, setText] = useState('');
+  const [stage, setStage] = useState<Stage>('idle');
+  const [heard, setHeard] = useState('');
+  const [text, setText] = useState(''); // web typing
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [chosen, setChosen] = useState<Record<number, number>>({});
   const [skipped, setSkipped] = useState<Set<number>>(new Set());
@@ -47,40 +49,16 @@ export default function FilerSheet({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  async function record() {
-    setError(null);
-    setDone(null);
-    try {
-      await startDictation();
-      setStage('recording');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start recording.');
-    }
-  }
-
-  async function stopAndRead() {
-    setStage('transcribing');
-    try {
-      const heard = await stopDictation();
-      // Straight into the box rather than filing blind: a misheard word is far
-      // easier to fix here than to unpick afterwards.
-      const next = text.trim() ? `${text.trim()} ${heard}` : heard;
-      setText(next);
-      setStage('write');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not transcribe that.');
-      setStage('write');
-    }
-  }
-
-  async function discard() {
-    await cancelDictation();
-    setStage('write');
-  }
+  // Fresh every time it opens; never leave a half-finished note lying around.
+  useEffect(() => {
+    if (!visible) return;
+    reset();
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function reset() {
     void cancelDictation();
-    setStage('write');
+    setStage('idle');
+    setHeard('');
     setText('');
     setProposals([]);
     setChosen({});
@@ -90,12 +68,45 @@ export default function FilerSheet({
     setDone(null);
   }
 
-  async function read() {
-    if (!text.trim()) return;
-    setStage('reading');
+  async function startRec() {
+    setError(null);
+    setDone(null);
+    try {
+      await startDictation();
+      setStage('recording');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not start recording.');
+      setStage('idle');
+    }
+  }
+
+  // Stop, transcribe, and read it -- all one step, so there is nothing else to
+  // press. What it understood is shown next for a yes or no.
+  async function stopAndRead() {
+    setStage('thinking');
     setError(null);
     try {
-      const result = await readNote(text.trim());
+      const said = await stopDictation();
+      setHeard(said);
+      await parse(said);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not hear that.');
+      setStage('idle');
+    }
+  }
+
+  // The web path: read what was typed.
+  async function readTyped() {
+    if (!text.trim()) return;
+    setHeard(text.trim());
+    setStage('thinking');
+    setError(null);
+    await parse(text.trim());
+  }
+
+  async function parse(sentence: string) {
+    try {
+      const result = await readNote(sentence);
       setProposals(result.proposals);
       setUnclear(result.unclear);
       setChosen(
@@ -105,13 +116,19 @@ export default function FilerSheet({
             .filter(([, id]) => id != null) as [number, number][],
         ),
       );
-      setStage(result.proposals.length ? 'confirm' : 'write');
-      if (!result.proposals.length && !result.unclear) {
-        setError('Nothing in that looked like something to file.');
+      if (result.proposals.length) {
+        setStage('confirm');
+      } else {
+        setStage('idle');
+        setError(
+          result.unclear
+            ? `Not sure what to do with "${result.unclear}". Try saying it again.`
+            : 'Nothing in that looked like something to file.',
+        );
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not read that.');
-      setStage('write');
+      setStage('idle');
     }
   }
 
@@ -120,7 +137,6 @@ export default function FilerSheet({
     setError(null);
     const failures: string[] = [];
     let filed = 0;
-
     for (let i = 0; i < proposals.length; i++) {
       if (skipped.has(i)) continue;
       const personId = chosen[i];
@@ -132,16 +148,16 @@ export default function FilerSheet({
         failures.push(`${proposals[i].person_said}: ${e instanceof Error ? e.message : 'failed'}`);
       }
     }
-
     onFiled();
     if (failures.length) {
       setError(failures.join('\n'));
       setStage('confirm');
     } else {
       setDone(`Filed ${filed} thing${filed === 1 ? '' : 's'}.`);
-      setStage('write');
       setProposals([]);
+      setHeard('');
       setText('');
+      setStage('idle');
     }
   }
 
@@ -152,77 +168,81 @@ export default function FilerSheet({
       <View style={styles.backdrop}>
         <TouchableOpacity style={styles.dismissArea} activeOpacity={1} onPress={onClose} />
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.sheetWrap}
-        >
-          <View style={styles.sheet}>
-            <View style={styles.grabber} />
+        <View style={styles.sheet}>
+          <View style={styles.grabber} />
+          <View style={styles.head}>
+            <Text style={styles.title}>
+              {stage === 'confirm' ? 'Is this right?' : 'File something'}
+            </Text>
+            <TouchableOpacity onPress={onClose} hitSlop={10}>
+              <MaterialIcons name="close" size={20} color={colors.muted} />
+            </TouchableOpacity>
+          </View>
 
-            <View style={styles.head}>
-              <Text style={styles.title}>
-                {stage === 'confirm' ? 'Is this right?' : 'File something'}
-              </Text>
-              <TouchableOpacity onPress={onClose} hitSlop={10}>
-                <MaterialIcons name="close" size={20} color={colors.muted} />
-              </TouchableOpacity>
-            </View>
-
-            {stage !== 'confirm' && stage !== 'filing' ? (
-              <>
+          {/* ----------------------------------------------- talk / thinking */}
+          {stage !== 'confirm' && stage !== 'filing' ? (
+            canDictate ? (
+              <View style={styles.micWrap}>
+                {stage === 'thinking' ? (
+                  <>
+                    <ActivityIndicator size="large" color={colors.cyan} />
+                    <Text style={styles.micHint}>Reading it…</Text>
+                  </>
+                ) : stage === 'recording' ? (
+                  <>
+                    <TouchableOpacity style={[styles.bigMic, styles.bigMicOn]} onPress={stopAndRead}>
+                      <MaterialIcons name="stop" size={40} color={colors.navy900} />
+                    </TouchableOpacity>
+                    <Text style={styles.micHint}>Listening… tap to stop</Text>
+                    <TouchableOpacity onPress={reset} hitSlop={8}>
+                      <Text style={styles.cancel}>Cancel</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity style={styles.bigMic} onPress={startRec}>
+                      <MaterialIcons name="mic" size={40} color={colors.navy900} />
+                    </TouchableOpacity>
+                    <Text style={styles.micHint}>Tap and say what happened</Text>
+                    {done ? <Text style={styles.done}>{done}</Text> : null}
+                    {error ? <Text style={styles.error}>{error}</Text> : null}
+                  </>
+                )}
+              </View>
+            ) : (
+              // Web: no microphone, so type it.
+              <View style={styles.typeWrap}>
                 <TextInput
                   style={styles.input}
                   value={text}
-                  onChangeText={(t) => {
-                    setText(t);
-                    setDone(null);
-                  }}
+                  onChangeText={setText}
                   placeholder="Avi Kroll stayed over for Shabbos and gave me a new number, 054 123 4567"
                   placeholderTextColor={colors.mutedDark}
                   multiline
-                  editable={stage === 'write'}
-                  autoFocus={canDictate ? false : true}
-                  onSubmitEditing={read}
+                  autoFocus
+                  editable={stage === 'idle'}
                 />
-                {canDictate ? (
-                  <View style={styles.dictateRow}>
-                    {stage === 'recording' ? (
-                      <>
-                        <TouchableOpacity style={styles.stop} onPress={stopAndRead}>
-                          <MaterialIcons name="stop" size={18} color={colors.navy900} />
-                          <Text style={styles.stopText}>Stop</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={discard} hitSlop={8}>
-                          <Text style={styles.discard}>Discard</Text>
-                        </TouchableOpacity>
-                        <View style={styles.recDot} />
-                        <Text style={styles.recText}>Listening</Text>
-                      </>
-                    ) : stage === 'transcribing' ? (
-                      <>
-                        <ActivityIndicator size="small" color={colors.cyan} />
-                        <Text style={styles.recText}>Writing it down…</Text>
-                      </>
-                    ) : (
-                      <>
-                        <TouchableOpacity style={styles.mic} onPress={record}>
-                          <MaterialIcons name="mic" size={19} color={colors.navy900} />
-                        </TouchableOpacity>
-                        <Text style={styles.hint}>
-                          {text.trim() ? 'Tap to add more' : 'Tap and say what happened'}
-                        </Text>
-                      </>
-                    )}
-                  </View>
-                ) : (
-                  <Text style={styles.hint}>
-                    Use your keyboard&apos;s mic to dictate. Several things at once is fine.
-                  </Text>
-                )}
-              </>
-            ) : null}
+                {done ? <Text style={styles.done}>{done}</Text> : null}
+                {error ? <Text style={styles.error}>{error}</Text> : null}
+                <TouchableOpacity
+                  style={[styles.primary, !text.trim() && styles.primaryOff]}
+                  disabled={!text.trim() || stage === 'thinking'}
+                  onPress={readTyped}
+                >
+                  {stage === 'thinking' ? (
+                    <ActivityIndicator color={colors.navy900} size="small" />
+                  ) : (
+                    <Text style={styles.primaryText}>Read it</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )
+          ) : null}
 
-            {stage === 'confirm' || stage === 'filing' ? (
+          {/* -------------------------------------------------- confirm */}
+          {stage === 'confirm' || stage === 'filing' ? (
+            <>
+              {heard ? <Text style={styles.heard}>&ldquo;{heard}&rdquo;</Text> : null}
               <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
                 {proposals.map((p, i) => {
                   const off = skipped.has(i);
@@ -269,10 +289,8 @@ export default function FilerSheet({
                                 style={[styles.pick, pick === c.id && styles.pickOn]}
                                 onPress={() => setChosen((s) => ({ ...s, [i]: c.id }))}
                               >
-                                <Text
-                                  style={[styles.pickText, pick === c.id && styles.pickTextOn]}
-                                >
-                                  {c.name} · {c.id}
+                                <Text style={[styles.pickText, pick === c.id && styles.pickTextOn]}>
+                                  {c.name}
                                 </Text>
                               </TouchableOpacity>
                             ))}
@@ -282,47 +300,29 @@ export default function FilerSheet({
                     </View>
                   );
                 })}
-
                 {unclear ? <Text style={styles.unclear}>Not sure about: {unclear}</Text> : null}
+                {error ? <Text style={styles.error}>{error}</Text> : null}
               </ScrollView>
-            ) : null}
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            {done ? <Text style={styles.done}>{done}</Text> : null}
-
-            <View style={styles.actions}>
-              {stage === 'confirm' ? (
-                <TouchableOpacity style={styles.ghost} onPress={reset}>
-                  <Text style={styles.ghostText}>Start over</Text>
+              <View style={styles.actions}>
+                <TouchableOpacity style={styles.ghost} onPress={reset} disabled={stage === 'filing'}>
+                  <Text style={styles.ghostText}>No, redo</Text>
                 </TouchableOpacity>
-              ) : null}
-              <TouchableOpacity
-                style={[
-                  styles.primary,
-                  (stage === 'reading' || stage === 'filing') && styles.primaryBusy,
-                  stage === 'confirm' && !ready && styles.primaryOff,
-                ]}
-                disabled={
-                  stage === 'reading' ||
-                  stage === 'filing' ||
-                  stage === 'recording' ||
-                  stage === 'transcribing' ||
-                  (stage === 'write' && !text.trim()) ||
-                  (stage === 'confirm' && !ready)
-                }
-                onPress={stage === 'confirm' ? file : read}
-              >
-                {stage === 'reading' || stage === 'filing' || stage === 'transcribing' ? (
-                  <ActivityIndicator color={colors.navy900} size="small" />
-                ) : (
-                  <Text style={styles.primaryText}>
-                    {stage === 'confirm' ? 'File it' : 'Read it'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
+                <TouchableOpacity
+                  style={[styles.primary, styles.grow, !ready && styles.primaryOff]}
+                  disabled={!ready || stage === 'filing'}
+                  onPress={file}
+                >
+                  {stage === 'filing' ? (
+                    <ActivityIndicator color={colors.navy900} size="small" />
+                  ) : (
+                    <Text style={styles.primaryText}>Yes, file it</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : null}
+        </View>
       </View>
     </Modal>
   );
@@ -331,7 +331,6 @@ export default function FilerSheet({
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(3,9,26,0.6)', justifyContent: 'flex-end' },
   dismissArea: { flex: 1 },
-  sheetWrap: { width: '100%' },
   sheet: {
     backgroundColor: colors.navy800,
     borderTopLeftRadius: 22,
@@ -359,8 +358,27 @@ const styles = StyleSheet.create({
   },
   title: { fontFamily: 'Poppins_600SemiBold', fontSize: 17, color: colors.white },
 
+  // The mic, centred and big -- the one thing to press.
+  micWrap: { alignItems: 'center', gap: 14, paddingVertical: space.xl, paddingHorizontal: space.md },
+  bigMic: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: colors.cyan,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.cyan,
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 8,
+  },
+  bigMicOn: { backgroundColor: '#ff8a80', shadowColor: '#ff8a80' },
+  micHint: { fontFamily: 'Poppins_500Medium', fontSize: 14.5, color: colors.muted },
+  cancel: { fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: colors.muted, marginTop: 2 },
+
+  typeWrap: { paddingHorizontal: space.md, gap: space.sm, paddingBottom: space.sm },
   input: {
-    marginHorizontal: space.md,
     backgroundColor: colors.navy900,
     borderWidth: 1,
     borderColor: colors.ruleOnNavy,
@@ -374,94 +392,63 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     textAlignVertical: 'top',
   },
-  dictateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm + 2,
-    paddingHorizontal: space.md,
-    paddingTop: 10,
-  },
-  mic: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.cyan,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: colors.bad,
-    borderRadius: 19,
-    paddingLeft: 10,
-    paddingRight: 14,
-    paddingVertical: 9,
-  },
-  stopText: { fontFamily: 'Poppins_700Bold', fontSize: 13.5, color: colors.navy900 },
-  discard: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: colors.muted },
-  recDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.bad, marginLeft: 'auto' },
-  recText: { fontFamily: 'Poppins_400Regular', fontSize: 12.5, color: colors.muted },
-  hint: {
-    ...type.body,
-    fontSize: 12,
-    color: colors.muted,
-    opacity: 0.65,
-    paddingHorizontal: space.md,
-    paddingTop: 8,
-  },
 
-  list: { paddingHorizontal: space.md, marginTop: 4 },
+  heard: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+    color: colors.muted,
+    fontStyle: 'italic',
+    paddingHorizontal: space.md,
+    paddingBottom: 4,
+  },
+  list: { paddingHorizontal: space.md, maxHeight: 360 },
   card: {
     backgroundColor: colors.navy900,
     borderWidth: 1,
     borderColor: colors.ruleOnNavy,
     borderRadius: radius.md,
-    padding: 13,
-    marginBottom: 8,
-    gap: 5,
+    padding: space.md,
+    marginBottom: space.sm,
+    gap: 6,
   },
   cardOff: { opacity: 0.4 },
-  cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  cardWhat: { flex: 1, fontFamily: 'Poppins_600SemiBold', fontSize: 14.5, color: colors.white },
-  who: { fontFamily: 'Poppins_400Regular', fontSize: 13.5, color: colors.cyan },
-  ambiguous: { ...type.body, fontSize: 12.5, color: colors.warn },
-  noMatch: { ...type.body, fontSize: 12.5, color: colors.bad },
+  cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+  cardWhat: { flex: 1, fontFamily: 'Poppins_500Medium', fontSize: 14.5, color: colors.white },
+  who: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: colors.cyan },
+  noMatch: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: '#ff8a80' },
+  ambiguous: { fontFamily: 'Poppins_400Regular', fontSize: 12.5, color: colors.muted },
   picks: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
   pick: {
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.ruleOnNavy,
-    borderRadius: radius.pill,
-    paddingHorizontal: 11,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   pickOn: { backgroundColor: colors.cyan, borderColor: colors.cyan },
-  pickText: { fontFamily: 'Poppins_400Regular', fontSize: 12.5, color: colors.muted },
-  pickTextOn: { fontFamily: 'Poppins_600SemiBold', color: colors.navy900 },
-  unclear: { ...type.body, fontSize: 12.5, color: colors.warn, paddingVertical: 6 },
+  pickText: { fontFamily: 'Poppins_500Medium', fontSize: 13, color: colors.muted },
+  pickTextOn: { color: colors.navy900 },
+  unclear: { fontFamily: 'Poppins_400Regular', fontSize: 12.5, color: colors.muted, opacity: 0.8, paddingVertical: 4 },
 
-  error: { ...type.body, fontSize: 13, color: colors.bad, paddingHorizontal: space.md, paddingTop: 8 },
-  done: { ...type.body, fontSize: 13, color: colors.cyan, paddingHorizontal: space.md, paddingTop: 8 },
-
-  actions: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.md, paddingTop: space.md },
+  actions: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.md, paddingTop: space.sm },
+  grow: { flex: 1 },
   primary: {
-    flex: 1,
     backgroundColor: colors.cyan,
     borderRadius: radius.md,
-    paddingVertical: 13,
+    paddingVertical: 14,
     alignItems: 'center',
   },
-  primaryBusy: { opacity: 0.7 },
   primaryOff: { opacity: 0.35 },
   primaryText: { fontFamily: 'Poppins_700Bold', fontSize: 15, color: colors.navy900 },
   ghost: {
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.ruleOnNavy,
-    borderRadius: radius.md,
-    paddingVertical: 13,
+    paddingVertical: 14,
     paddingHorizontal: 18,
     alignItems: 'center',
   },
   ghostText: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: colors.muted },
+  error: { fontFamily: 'Poppins_400Regular', fontSize: 13, color: '#ff8a80', textAlign: 'center', paddingTop: 6 },
+  done: { fontFamily: 'Poppins_600SemiBold', fontSize: 14, color: colors.cyan, textAlign: 'center', paddingTop: 6 },
 });
