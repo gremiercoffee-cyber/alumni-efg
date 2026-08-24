@@ -22,6 +22,7 @@ type Person = {
   id: number;
   first_name: string;
   last_name: string;
+  nickname?: string | null;
   email: string | null;
   phone: string | null;
   city: string | null;
@@ -48,7 +49,7 @@ function card(p: Person, siteUrl: string) {
   return `
   <tr><td style="padding:14px 0;border-bottom:1px solid #1e2f52;">
     <div style="font:600 16px Helvetica,Arial,sans-serif;color:#ffffff;">
-      ${esc(p.first_name)} ${esc(p.last_name)}
+      ${esc((p.nickname && p.nickname.trim()) || p.first_name)} ${esc(p.last_name)}
     </div>
     ${facts ? `<div style="font:400 13px Helvetica,Arial,sans-serif;color:#b9cbee;padding-top:2px;">${esc(facts)}</div>` : ''}
     <div style="padding-top:8px;">
@@ -142,7 +143,7 @@ Deno.serve(async (req) => {
 
     const { data: people } = await admin
       .from('people')
-      .select('id, first_name, last_name, email, phone, city, country, occupation, marital_status')
+      .select('id, first_name, last_name, nickname, email, phone, city, country, occupation, marital_status')
       .in('id', ids);
 
     const html = digestHtml(rebbe.name, (people ?? []) as Person[], siteUrl);

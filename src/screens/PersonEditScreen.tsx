@@ -39,7 +39,7 @@ const GROUPS: [string, FieldSpec[]][] = [
   ['NAME', [
     { key: 'first_name', label: 'First name' },
     { key: 'last_name', label: 'Last name' },
-    { key: 'nickname', label: 'Nickname' },
+    { key: 'nickname', label: 'Goes by (shown instead of first name)' },
   ]],
   ['REACHING HIM', [
     { key: 'phone', label: 'Phone', keyboard: 'phone-pad' },

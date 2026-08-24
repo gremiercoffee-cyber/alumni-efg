@@ -177,10 +177,12 @@ Deno.serve(async (req) => {
   for (const row of due ?? []) {
     const { data: person } = await admin
       .from('people')
-      .select('first_name, last_name')
+      .select('first_name, last_name, nickname')
       .eq('id', row.person_id)
       .maybeSingle();
-    const name = person ? `${person.first_name} ${person.last_name}` : 'An alumnus';
+    const name = person
+      ? `${(person.nickname && person.nickname.trim()) || person.first_name} ${person.last_name}`
+      : 'An alumnus';
 
     let subject = '';
     let title = '';

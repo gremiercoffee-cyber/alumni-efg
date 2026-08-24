@@ -121,7 +121,7 @@ export default function PersonScreen({
 
         {/* Two different claims, and they disagree for 208 of the 723. Merging
             them would hide exactly the thing worth seeing. */}
-        <Section title="HIS REBBE IN THE PROGRAM" footnote="From the alumni database — who his rebbe was.">
+        <Section title="REBBE CONTACT">
           {person.programRebbeim.length ? (
             person.programRebbeim.map((r) => (
               <View key={`${r.year}-${r.rebbe}`} style={styles.tl}>
@@ -136,8 +136,7 @@ export default function PersonScreen({
         </Section>
 
         <Section
-          title="REBBEIM WHO SAY THEY ARE CLOSE WITH HIM"
-          footnote="From the rebbeim's own sheet — their answer, not his."
+          title={'LISTED HIM AS "MY ALUMNI"'}
         >
           {person.claimedBy.length ? (
             <View style={styles.pills}>

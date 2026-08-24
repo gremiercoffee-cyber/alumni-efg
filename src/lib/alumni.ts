@@ -158,7 +158,11 @@ export async function loadDirectory(myStaffId: number | null): Promise<Directory
       }
     }
 
-    const name = `${p.first_name} ${p.last_name}`.trim();
+    // What he is shown as: his nickname if he has one, else his given name.
+    // The given name stays on file and in the haystack, so search still finds
+    // him under it.
+    const shown = (p.nickname && p.nickname.trim()) || p.first_name;
+    const name = `${shown} ${p.last_name}`.trim();
     return {
       ...p,
       name,
