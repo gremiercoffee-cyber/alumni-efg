@@ -156,6 +156,7 @@ Deno.serve(async (req) => {
       'wedding_today',
       'wedding_day_after',
       'birthday_today',
+      'simcha_news',
     ])
     .order('created_at');
 
@@ -200,14 +201,32 @@ Deno.serve(async (req) => {
       subject = `Send the Mazal Tov for ${name}`;
       title = 'Send the Mazal Tov';
       body = `${name} got married yesterday. It is in your To Do list.`;
-    } else {
+    } else if (row.kind === 'birthday_today') {
       subject = `${name}'s birthday is today`;
       title = 'A birthday today';
       body = `It's ${name}'s birthday today.`;
+    } else {
+      // simcha_news: an engagement, a birth, a bar mitzvah, and so on.
+      const t = row.payload?.simcha_type as string;
+      const WHAT: Record<string, string> = {
+        engagement: 'got engaged',
+        birth: 'had a baby',
+        bar_mitzvah: 'made a bar mitzvah',
+        child_engagement: "'s child got engaged",
+        child_bar_mitzvah: "'s child made a bar mitzvah",
+        grandchild_birth: 'has a new grandchild',
+        other: 'has a simcha',
+      };
+      const phrase = WHAT[t] ?? 'has a simcha';
+      const joiner = phrase.startsWith("'") ? '' : ' ';
+      subject = `Mazal tov — ${name}${joiner}${phrase}`;
+      title = 'Mazal tov';
+      body = `${name}${joiner}${phrase}.`;
     }
 
     const isBirthday = row.kind === 'birthday_today';
     const adminOnly = row.kind === 'wedding_day_after';
+    // simcha_news rides the same announcement email switch as weddings.
 
     // Admin-only means admin-only: no list email, whatever the switches say.
     // Telling everyone to send the Mazal Tov is not the same as sending it.
