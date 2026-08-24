@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -75,7 +76,9 @@ export default function FilerSheet({
       await startDictation();
       setStage('recording');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start recording.');
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      Alert.alert('Mic could not start', msg);
       setStage('idle');
     }
   }
@@ -90,7 +93,9 @@ export default function FilerSheet({
       setHeard(said);
       await parse(said);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not hear that.');
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      Alert.alert('Could not hear that', msg);
       setStage('idle');
     }
   }

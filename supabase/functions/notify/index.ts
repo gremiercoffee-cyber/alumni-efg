@@ -168,6 +168,52 @@ Deno.serve(async (req) => {
   const { data: adminRows } = await admin.from('admin_push_tokens').select('token');
   const adminTokens = (adminRows ?? []).map((t: { token: string }) => t.token);
 
+  // Immediate admin pushes -- someone needs approval, a profile changed. Drained
+  // every run and every five minutes by the 'alerts' cron, never held to 9am:
+  // an approval that waits an hour is an approval that waits.
+  async function drainAdminAlerts(): Promise<number> {
+    if (!s.push_enabled || !adminTokens.length) return 0;
+    const { data: alerts } = await admin
+      .from('notification_outbox')
+      .select('*')
+      .is('sent_at', null)
+      .in('kind', ['needs_approval', 'profile_updated'])
+      .order('created_at');
+    let n = 0;
+    for (const a of alerts ?? []) {
+      let title = '';
+      let body = '';
+      if (a.kind === 'needs_approval') {
+        title = 'Someone needs approval';
+        body = `${a.payload?.email ?? 'A new user'} signed in and is waiting to be let in.`;
+      } else {
+        const { data: person } = await admin
+          .from('people')
+          .select('first_name, last_name, nickname')
+          .eq('id', a.person_id)
+          .maybeSingle();
+        const name = person
+          ? `${(person.nickname && person.nickname.trim()) || person.first_name} ${person.last_name}`
+          : 'An alumnus';
+        title = 'Profile updated';
+        body = `${name}'s ${String(a.payload?.field ?? 'info').replace(/_/g, ' ')} was updated.`;
+      }
+      if (!dryRun) {
+        await push(adminTokens, title, body);
+        await admin.from('notification_outbox')
+          .update({ sent_at: new Date().toISOString() }).eq('id', a.id);
+      }
+      n++;
+    }
+    return n;
+  }
+
+  // The five-minute cron asks only for these; do them and stop.
+  if (opts?.only === 'alerts') {
+    const alerts = await drainAdminAlerts();
+    return Response.json({ only: 'alerts', alerts });
+  }
+
   // Everything waits for 9am in Jerusalem. A reminder at 3am is a reminder
   // nobody sees, and one that wakes people is worse than none.
   const rightHour = jerusalemHour() === SEND_HOUR;
@@ -330,32 +376,12 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Daily summary of profile edits: one push, "N profiles changed since
-  // yesterday", at the send hour. The edits already applied -- this is the
-  // being-told the admin asked for, not a queue to work.
-  let changeSummary: unknown = null;
-  if (!hold || opts?.force) {
-    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-    const { data: changes } = await admin
-      .from('recent_profile_changes')
-      .select('person_id, changed_at')
-      .gte('changed_at', since);
-    const n = (changes ?? []).length;
-    const people = new Set((changes ?? []).map((c: { person_id: number }) => c.person_id)).size;
-    changeSummary = { edits: n, people };
-    if (!dryRun && n > 0 && s.push_enabled && adminTokens.length) {
-      await push(
-        adminTokens,
-        'Profiles updated',
-        `${people} ${people === 1 ? 'alumnus' : 'alumni'} updated since yesterday (${n} change${n === 1 ? '' : 's'}).`,
-      );
-    }
-  }
+  const alerts = await drainAdminAlerts();
 
   return Response.json({
     dry_run: dryRun,
     broadcasts,
-    change_summary: changeSummary,
+    alerts,
     queued,
     considered: (due ?? []).length,
     emails_on: s.emails_enabled,
