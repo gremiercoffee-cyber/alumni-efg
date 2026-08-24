@@ -867,6 +867,7 @@ export type Database = {
           hometown: string | null
           id: number
           in_chinuch: boolean
+          in_program: boolean
           last_name: string
           learning_post_gesher: string | null
           marital_status: string | null
@@ -902,6 +903,7 @@ export type Database = {
           hometown?: string | null
           id?: number
           in_chinuch?: boolean
+          in_program?: boolean
           last_name: string
           learning_post_gesher?: string | null
           marital_status?: string | null
@@ -937,6 +939,7 @@ export type Database = {
           hometown?: string | null
           id?: number
           in_chinuch?: boolean
+          in_program?: boolean
           last_name?: string
           learning_post_gesher?: string | null
           marital_status?: string | null
@@ -2274,6 +2277,10 @@ export type Database = {
       claim_new_staff: { Args: { p_name: string }; Returns: undefined }
       claim_staff: { Args: { p_staff_id: number }; Returns: undefined }
       current_staff_id: { Args: never; Returns: number }
+      display_name: {
+        Args: { first: string; last: string; nick: string }
+        Returns: string
+      }
       edit_person: {
         Args: { p_changes: Json; p_person_id: number }
         Returns: undefined

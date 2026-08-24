@@ -92,7 +92,11 @@ async function fetchAll<T>(
 export async function loadDirectory(myStaffId: number | null): Promise<Directory> {
   const [peopleRows, enrolRows, aliasRows, staffRows, connRows, attendRows, eventRows, contactRows] =
     await Promise.all([
-      fetchAll<any>(() => supabase.from('people').select('*').order('last_name') as never),
+      fetchAll<any>(() => supabase.from('people').select('*')
+        // Currently-in-program guys are hidden everywhere forward-facing.
+        // Their rows stay in the database and their connections are kept;
+        // they simply do not appear until the admin flips in_program off.
+        .eq('in_program', false).order('last_name') as never),
       fetchAll<any>(() => supabase.from('enrollments').select('person_id, academic_year, level, rebbe_id') as never),
       fetchAll<any>(() => supabase.from('person_aliases').select('person_id, alias') as never),
       fetchAll<any>(() => supabase.from('staff').select('id, name').order('surname') as never),
